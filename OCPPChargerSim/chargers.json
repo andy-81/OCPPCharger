@@ -1,0 +1,16 @@
+[
+  {
+    "id": "wallbox-pulsar-plus",
+    "make": "Wall Box Chargers",
+    "model": "Pulsar Plus",
+    "chargePointModel": "PLP1-M-2-4",
+    "chargePointVendor": "Wall Box Chargers",
+    "chargePointSerialNumber": "0",
+    "chargeBoxSerialNumber": "0",
+    "firmwareVersion": "5.17.87",
+    "meterType": "Internal NON compliant",
+    "meterSerialNumber": "",
+    "iccid": "",
+    "imsi": ""
+  }
+]

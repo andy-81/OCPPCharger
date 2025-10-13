@@ -1,0 +1,72 @@
+2025-10-13 17:28:24.886 - Connecting to wss://ocpp.octopus.energy/
+2025-10-13 17:28:25.216 - SEND [2,"1027082133","BootNotification",{"chargePointSerialNumber":"121111","chargePointVendor":"Wall Box Chargers","meterType":"Internal NON compliant","meterSerialNumber":"","chargePointModel":"PLP1-M-2-4","iccid":"","chargeBoxSerialNumber":"121111","firmwareVersion":"5.17.87","imsi":""}]
+2025-10-13 17:28:28.196 - RECV [3,"1027082133",{"currentTime":"2025-10-13T16:28:28Z","interval":10,"status":"Accepted"}]
+2025-10-13 17:28:28.198 - RECV [2,"890da728-9df2-4217-a0c3-d30beebd9554","ChangeConfiguration",{"key":"AuthEnabledOffline","value":"False"}]
+2025-10-13 17:28:28.205 - Configuration updated: AuthEnabledOffline=False
+2025-10-13 17:28:28.206 - SEND [2,"2025101316282820042f56a","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2025-10-13T16:28:28.2005360\u002B00:00"}]
+2025-10-13 17:28:28.206 - SEND [3,"890da728-9df2-4217-a0c3-d30beebd9554",{"status":"Accepted"}]
+2025-10-13 17:28:28.209 - SEND [2,"20251013162828207fe90e0","MeterValues",{"connectorId":1,"meterValue":[{"timestamp":"2025-10-13T16:28:28.2086900\u002B00:00","sampledValue":[{"value":"0","measurand":"Energy.Active.Import.Register","unit":"Wh","context":"Sample.Clock"},{"value":"0.0","measurand":"Power.Active.Import","unit":"kW","context":"Sample.Clock"},{"value":"0.0","measurand":"Current.Import","unit":"A","context":"Sample.Clock"}]}]}]
+2025-10-13 17:28:28.250 - RECV [3,"2025101316282820042f56a",{}]
+2025-10-13 17:28:28.252 - RECV [2,"996c1c22-7c98-45ed-bec8-d2b193852dff","SendLocalList",{"listVersion":1,"updateType":"Full","localAuthorizationList":[{"idTag":"ffffffffffffff7f"}]}]
+2025-10-13 17:28:28.253 - Local authorization list updated to version 1 with 1 entries
+2025-10-13 17:28:28.253 - SEND [3,"996c1c22-7c98-45ed-bec8-d2b193852dff",{"status":"Accepted"}]
+2025-10-13 17:28:28.253 - RECV [3,"20251013162828207fe90e0",{}]
+2025-10-13 17:28:28.269 - RECV [2,"addbb59f-33d7-4004-8dcd-1e0635f3137f","ChangeConfiguration",{"key":"MeterValuesSampledData","value":"Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,Current.Offered,SoC,Voltage,Energy.Active.Export.Register,Power.Active.Export"}]
+2025-10-13 17:28:28.270 - Configuration updated: MeterValuesSampledData=Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,Current.Offered,SoC,Voltage,Energy.Active.Export.Register,Power.Active.Export
+2025-10-13 17:28:28.270 - SEND [3,"addbb59f-33d7-4004-8dcd-1e0635f3137f",{"status":"Accepted"}]
+2025-10-13 17:28:28.287 - RECV [2,"6fee458e-1f64-4563-8d8f-a403b0c8d344","GetConfiguration",{"key":["V2GCapabilities"]}]
+2025-10-13 17:28:28.289 - SEND [3,"6fee458e-1f64-4563-8d8f-a403b0c8d344",{"configurationKey":[],"unknownKey":["V2GCapabilities"]}]
+2025-10-13 17:28:28.331 - RECV [2,"d678815e-7bec-4b01-9385-1e82aee78fd1","ChangeConfiguration",{"key":"MeterValueSampleInterval","value":"60"}]
+2025-10-13 17:28:28.332 - Configuration updated: MeterValueSampleInterval=60
+2025-10-13 17:28:28.332 - SEND [3,"d678815e-7bec-4b01-9385-1e82aee78fd1",{"status":"Accepted"}]
+2025-10-13 17:28:28.348 - RECV [2,"10cbd2ce-85a3-4b55-9dad-aa4668bac7ba","ChangeConfiguration",{"key":"minSoC","value":"25"}]
+2025-10-13 17:28:28.348 - Configuration updated: minSoC=25
+2025-10-13 17:28:28.348 - SEND [3,"10cbd2ce-85a3-4b55-9dad-aa4668bac7ba",{"status":"Accepted"}]
+2025-10-13 17:28:28.365 - RECV [2,"99fbe917-f06d-4d7d-a454-d544faac356a","ChangeConfiguration",{"key":"ClockAlignedDataInterval","value":"60"}]
+2025-10-13 17:28:28.365 - Configuration updated: ClockAlignedDataInterval=60
+2025-10-13 17:28:28.365 - SEND [3,"99fbe917-f06d-4d7d-a454-d544faac356a",{"status":"Accepted"}]
+2025-10-13 17:28:28.381 - RECV [2,"dcf32224-9e67-4ca5-b157-2d605c6efb51","ChangeConfiguration",{"key":"maxSoC","value":"97"}]
+2025-10-13 17:28:28.382 - Configuration updated: maxSoC=97
+2025-10-13 17:28:28.382 - SEND [3,"dcf32224-9e67-4ca5-b157-2d605c6efb51",{"status":"Accepted"}]
+2025-10-13 17:28:28.399 - RECV [2,"e757447f-9b54-4b55-9b99-105b0c5c27ff","ChangeConfiguration",{"key":"MeterValuesAlignedData","value":"Power.Active.Import,Power.Active.Export"}]
+2025-10-13 17:28:28.399 - Configuration updated: MeterValuesAlignedData=Power.Active.Import,Power.Active.Export
+2025-10-13 17:28:28.399 - SEND [3,"e757447f-9b54-4b55-9b99-105b0c5c27ff",{"status":"Accepted"}]
+2025-10-13 17:28:28.416 - RECV [2,"8ccee856-3cfe-4cbf-b651-ff2bb412ddba","ChangeConfiguration",{"key":"chargingALimitConn1","value":"32"}]
+2025-10-13 17:28:28.416 - Configuration updated: chargingALimitConn1=32
+2025-10-13 17:28:28.416 - SEND [3,"8ccee856-3cfe-4cbf-b651-ff2bb412ddba",{"status":"Accepted"}]
+2025-10-13 17:46:42.706 - Connecting to wss://ocpp.octopus.energy/
+2025-10-13 17:46:43.012 - SEND [2,"1027082133","BootNotification",{"chargePointSerialNumber":"121111","chargePointVendor":"Wall Box Chargers","meterType":"Internal NON compliant","meterSerialNumber":"","chargePointModel":"PLP1-M-2-4","iccid":"","chargeBoxSerialNumber":"121111","firmwareVersion":"5.17.87","imsi":""}]
+2025-10-13 17:46:45.211 - RECV [3,"1027082133",{"currentTime":"2025-10-13T16:46:45Z","interval":10,"status":"Accepted"}]
+2025-10-13 17:46:45.214 - RECV [2,"85b1c5c9-74bb-4ce6-af71-1c5a9d907ab6","ChangeConfiguration",{"key":"AuthEnabledOffline","value":"False"}]
+2025-10-13 17:46:45.220 - Configuration updated: AuthEnabledOffline=False
+2025-10-13 17:46:45.221 - SEND [3,"85b1c5c9-74bb-4ce6-af71-1c5a9d907ab6",{"status":"Accepted"}]
+2025-10-13 17:46:45.221 - SEND [2,"2025101316464521593d398","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available","timestamp":"2025-10-13T16:46:45.2158003\u002B00:00"}]
+2025-10-13 17:46:45.225 - SEND [2,"20251013164645223329f43","MeterValues",{"connectorId":1,"meterValue":[{"timestamp":"2025-10-13T16:46:45.2244823\u002B00:00","sampledValue":[{"value":"0","measurand":"Energy.Active.Import.Register","unit":"Wh","context":"Sample.Clock"},{"value":"0.0","measurand":"Power.Active.Import","unit":"kW","context":"Sample.Clock"},{"value":"0.0","measurand":"Current.Import","unit":"A","context":"Sample.Clock"}]}]}]
+2025-10-13 17:46:45.237 - RECV [2,"3cb21349-53f1-40ef-830e-8892038cd4f2","SendLocalList",{"listVersion":1,"updateType":"Full","localAuthorizationList":[{"idTag":"ffffffffffffff7f"}]}]
+2025-10-13 17:46:45.238 - Local authorization list updated to version 1 with 1 entries
+2025-10-13 17:46:45.238 - SEND [3,"3cb21349-53f1-40ef-830e-8892038cd4f2",{"status":"Accepted"}]
+2025-10-13 17:46:45.271 - RECV [3,"2025101316464521593d398",{}]
+2025-10-13 17:46:45.272 - RECV [3,"20251013164645223329f43",{}]
+2025-10-13 17:46:45.272 - RECV [2,"0d8424b7-e9db-470e-830d-15730990b697","ChangeConfiguration",{"key":"MeterValuesSampledData","value":"Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,Current.Offered,SoC,Voltage,Energy.Active.Export.Register,Power.Active.Export"}]
+2025-10-13 17:46:45.273 - Configuration updated: MeterValuesSampledData=Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,Current.Offered,SoC,Voltage,Energy.Active.Export.Register,Power.Active.Export
+2025-10-13 17:46:45.273 - SEND [3,"0d8424b7-e9db-470e-830d-15730990b697",{"status":"Accepted"}]
+2025-10-13 17:46:45.290 - RECV [2,"678cece6-7f56-4b1e-98fe-2c4bc331f2c2","GetConfiguration",{"key":["V2GCapabilities"]}]
+2025-10-13 17:46:45.291 - SEND [3,"678cece6-7f56-4b1e-98fe-2c4bc331f2c2",{"configurationKey":[],"unknownKey":["V2GCapabilities"]}]
+2025-10-13 17:46:45.316 - RECV [2,"6a5770f9-a046-4465-ae39-c7c28d7b8292","ChangeConfiguration",{"key":"MeterValueSampleInterval","value":"60"}]
+2025-10-13 17:46:45.317 - Configuration updated: MeterValueSampleInterval=60
+2025-10-13 17:46:45.317 - SEND [3,"6a5770f9-a046-4465-ae39-c7c28d7b8292",{"status":"Accepted"}]
+2025-10-13 17:46:45.333 - RECV [2,"9fdab101-280e-47d7-8ec1-e279419adf8f","ChangeConfiguration",{"key":"minSoC","value":"25"}]
+2025-10-13 17:46:45.333 - Configuration updated: minSoC=25
+2025-10-13 17:46:45.333 - SEND [3,"9fdab101-280e-47d7-8ec1-e279419adf8f",{"status":"Accepted"}]
+2025-10-13 17:46:45.364 - RECV [2,"602bbb74-7a63-4a93-a3cc-e743ea27ff85","ChangeConfiguration",{"key":"ClockAlignedDataInterval","value":"60"}]
+2025-10-13 17:46:45.365 - Configuration updated: ClockAlignedDataInterval=60
+2025-10-13 17:46:45.365 - SEND [3,"602bbb74-7a63-4a93-a3cc-e743ea27ff85",{"status":"Accepted"}]
+2025-10-13 17:46:45.600 - RECV [2,"4665484a-3293-4331-84ab-e53c354a5abb","ChangeConfiguration",{"key":"maxSoC","value":"97"}]
+2025-10-13 17:46:45.600 - Configuration updated: maxSoC=97
+2025-10-13 17:46:45.600 - SEND [3,"4665484a-3293-4331-84ab-e53c354a5abb",{"status":"Accepted"}]
+2025-10-13 17:46:45.617 - RECV [2,"73a3e12c-1eca-4bc1-944d-aba3c501549f","ChangeConfiguration",{"key":"MeterValuesAlignedData","value":"Power.Active.Import,Power.Active.Export"}]
+2025-10-13 17:46:45.617 - Configuration updated: MeterValuesAlignedData=Power.Active.Import,Power.Active.Export
+2025-10-13 17:46:45.617 - SEND [3,"73a3e12c-1eca-4bc1-944d-aba3c501549f",{"status":"Accepted"}]
+2025-10-13 17:46:45.633 - RECV [2,"39703fe0-ea19-4b60-8616-d286f85a6796","ChangeConfiguration",{"key":"chargingALimitConn1","value":"32"}]
+2025-10-13 17:46:45.633 - Configuration updated: chargingALimitConn1=32
+2025-10-13 17:46:45.634 - SEND [3,"39703fe0-ea19-4b60-8616-d286f85a6796",{"status":"Accepted"}]

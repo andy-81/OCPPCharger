@@ -1,0 +1,35 @@
+# Build outputs
+bin/
+obj/
+
+# User-specific files
+.vs/
+*.user
+*.suo
+*.tmp
+*.log
+*.ncb
+*.opendb
+*.VC.db
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Cache and tooling
+packages/
+TestResults/
+.sonarqube/
+.scannerwork/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Temporary/backup files
+*~
+*.swp
+*.swo
+
+# Secrets / runtime configuration
+simulator.json

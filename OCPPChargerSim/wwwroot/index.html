@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EV Charger Simulator Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js" crossorigin="anonymous"></script>
+  </head>
+  <body>
+    <header>
+      <h1>EV Charger Simulator</h1>
+      <p>Monitor logs, vehicle status, and issue commands in real time.</p>
+    </header>
+    <div class="content">
+      <section class="panel" id="status-card">
+        <div class="status-value" id="vehicle-status">Loading…</div>
+        <div class="metrics" id="metrics">
+          <div class="metric">
+            <span class="metric-label">Power</span>
+            <span class="metric-value" id="metric-power">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Current</span>
+            <span class="metric-value" id="metric-current">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Energy</span>
+            <span class="metric-value" id="metric-energy">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">State of Charge</span>
+            <span class="metric-value" id="metric-soc">—</span>
+          </div>
+        </div>
+        <div class="controls">
+          <h3>Set Status</h3>
+          <div class="button-grid">
+            <button data-status="Unavailable">Out of Service</button>
+            <button data-status="Available">Available</button>
+            <button data-status="Charging">Charging 🔌 🚗 ⚡</button>
+            <button data-status="SuspendedEV">Suspend 🔌 🚗 ⏸️</button>
+          </div>
+          <div class="aux-button-row">
+            <button id="send-heartbeat" class="secondary-button" type="button">Send Heartbeat</button>
+            <div class="aux-group">
+              <button id="close-connection" class="secondary-button danger" type="button">Close Connection</button>
+              <button id="open-config" class="secondary-button" type="button">Configure</button>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-log" checked />
+                <span>Log to disk</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="configuration-card">
+        <header class="panel-header">
+          <h2>Configuration</h2>
+        </header>
+        <div class="config-list">
+          <table>
+            <thead>
+              <tr><th>Key</th><th>Value</th></tr>
+            </thead>
+            <tbody id="config-table"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="log-panel" id="logs-card">
+      <header class="panel-header">
+        <div class="panel-actions right-aligned">
+          <button id="copy-logs" class="secondary-button">Copy</button>
+          <button id="clear-logs" class="secondary-button">Clear</button>
+        </div>
+      </header>
+      <pre id="log-output" class="log-output"></pre>
+    </section>
+
+    <footer>
+      <span id="connection-status" class="status-indicator connecting">Connecting…</span>
+    </footer>
+
+    <div id="config-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Simulator Configuration</h2>
+        <form id="config-form">
+          <label>
+            <span>Charger Type</span>
+            <select id="config-charger" required></select>
+          </label>
+          <label>
+            <span>OCPP Server URL</span>
+            <input type="text" id="config-url" required />
+          </label>
+          <label>
+            <span>Charge Point Identity</span>
+            <input type="text" id="config-identity" required />
+          </label>
+          <label>
+            <span>Authorization Key</span>
+            <input type="text" id="config-auth" required />
+          </label>
+          <label>
+            <span>Charge Point Serial Number</span>
+            <input type="text" id="config-cp-serial" required />
+          </label>
+          <label>
+            <span>Charge Box Serial Number</span>
+            <input type="text" id="config-cb-serial" required />
+          </label>
+          <div id="config-error" class="form-error" role="alert"></div>
+          <div class="modal-actions">
+            <button type="button" id="config-cancel" class="secondary-button">Cancel</button>
+            <button type="submit" class="primary-button">Save configuration</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
