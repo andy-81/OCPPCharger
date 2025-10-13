@@ -12,5 +12,19 @@
     "meterSerialNumber": "",
     "iccid": "",
     "imsi": ""
+  },
+  {
+    "id": "openevse",
+    "make": "OpenEVSE",
+    "model": "Advanced Series",
+    "chargePointModel": "Advanced Series",
+    "chargePointVendor": "OpenEVSE",
+    "chargePointSerialNumber": "0",
+    "chargeBoxSerialNumber": "0",
+    "firmwareVersion": "1.0",
+    "meterType": "Internal NON compliant",
+    "meterSerialNumber": "",
+    "iccid": "",
+    "imsi": ""
   }
 ]
