@@ -20,6 +20,18 @@ dotnet run --project OCPPChargerSim/OCPPChargerSim.csproj
 ```
 Access the dashboard at `http://localhost:5000`.
 
+### Docker
+```bash
+docker build -t ocpp-charger-sim .
+docker run --rm -p 5000:5000 ocpp-charger-sim
+```
+After the container starts, open `http://localhost:5000` in your browser.
+
+To retain user settings, and logs specify a data directory:
+```bash
+docker run --rm -p 5000:5000 -v $(pwd)/sim-data:/app/data ocpp-charger-sim
+```
+
 On first launch, the configuration dialog appears automatically. Enter the OCPP server URL, charge point identity, authorization key, charger type, and serial numbers. The settings are saved to `simulator.json`.
 
 ## Files of Note

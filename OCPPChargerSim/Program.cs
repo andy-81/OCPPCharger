@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -8,15 +10,19 @@ using OcppWeb.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddJsonFile("simulator.json", optional: true, reloadOnChange: true);
+var dataDirectory = ResolveDataDirectory(builder.Environment);
+builder.Configuration.AddJsonFile(Path.Combine(dataDirectory, "simulator.json"), optional: true, reloadOnChange: true);
 
 var chargerCatalog = ChargerCatalog.Load(builder.Environment.ContentRootPath);
 builder.Services.AddSingleton(chargerCatalog);
 
+var storageOptions = new SimulatorStorageOptions(dataDirectory);
+builder.Services.AddSingleton(storageOptions);
+
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<SimulatorState>();
 builder.Services.AddSingleton<SimulatorCoordinator>();
-builder.Services.AddSingleton(sp => new SimulatorConfigurationProvider(builder.Configuration, builder.Environment.ContentRootPath, chargerCatalog));
+builder.Services.AddSingleton(sp => new SimulatorConfigurationProvider(builder.Configuration, storageOptions.DataDirectory, chargerCatalog));
 builder.Services.AddHostedService<SimulatorHostedService>();
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -201,6 +207,19 @@ app.MapPost("/api/bootstrap", async (BootstrapRequest request, SimulatorConfigur
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+static string ResolveDataDirectory(IHostEnvironment environment)
+{
+    var configured = Environment.GetEnvironmentVariable("APP_DATA");
+    var basePath = string.IsNullOrWhiteSpace(configured)
+        ? environment.ContentRootPath
+        : Path.GetFullPath(configured);
+
+    Directory.CreateDirectory(basePath);
+    return basePath;
+}
+
+public sealed record SimulatorStorageOptions(string DataDirectory);
 
 record StatusRequest(string Status);
 

@@ -17,6 +17,7 @@ public sealed class SimulatorHostedService : BackgroundService
     private readonly IHubContext<SimulatorHub, ISimulatorClient> _hubContext;
     private readonly ILogger<SimulatorHostedService> _logger;
     private readonly SimulatorConfigurationProvider _configurationProvider;
+    private readonly SimulatorStorageOptions _storageOptions;
     private readonly ChargerCatalog _catalog;
 
     public SimulatorHostedService(
@@ -25,6 +26,7 @@ public sealed class SimulatorHostedService : BackgroundService
         IHubContext<SimulatorHub, ISimulatorClient> hubContext,
         SimulatorConfigurationProvider configurationProvider,
         ChargerCatalog catalog,
+        SimulatorStorageOptions storageOptions,
         ILogger<SimulatorHostedService> logger)
     {
         _coordinator = coordinator;
@@ -33,6 +35,7 @@ public sealed class SimulatorHostedService : BackgroundService
         _logger = logger;
         _configurationProvider = configurationProvider;
         _catalog = catalog;
+        _storageOptions = storageOptions;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -99,7 +102,7 @@ public sealed class SimulatorHostedService : BackgroundService
             return;
         }
 
-        var logPath = Path.GetFullPath(options.LogFile ?? "log.txt");
+        var logPath = Path.Combine(_storageOptions.DataDirectory, options.LogFile ?? "log.txt");
         using var logger = new DualLogger(logPath);
         var identity = new ChargerIdentity(
             charger.Id,
@@ -123,6 +126,7 @@ public sealed class SimulatorHostedService : BackgroundService
             options.ChargePointSerialNumber ?? "0",
             options.ChargeBoxSerialNumber ?? "0",
             logger,
+            _storageOptions.DataDirectory,
             supportSoC: options.SupportSoC,
             enableHeartbeat: options.SupportHeartbeat);
 

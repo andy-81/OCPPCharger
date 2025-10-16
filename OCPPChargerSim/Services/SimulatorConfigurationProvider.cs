@@ -25,10 +25,16 @@ public sealed class SimulatorConfigurationProvider
 
     public event Action? ConfigurationChanged;
 
-    public SimulatorConfigurationProvider(IConfiguration configuration, string contentRootPath, ChargerCatalog catalog)
+    public SimulatorConfigurationProvider(IConfiguration configuration, string dataDirectory, ChargerCatalog catalog)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-        _configFilePath = Path.Combine(contentRootPath, "simulator.json");
+        if (string.IsNullOrWhiteSpace(dataDirectory))
+        {
+            throw new ArgumentException("Data directory must be provided.", nameof(dataDirectory));
+        }
+
+        Directory.CreateDirectory(dataDirectory);
+        _configFilePath = Path.Combine(dataDirectory, "simulator.json");
 
         var section = configuration.GetSection(ConfigSectionName);
         var bound = section.Get<SimulatorOptions>();

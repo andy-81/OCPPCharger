@@ -43,7 +43,6 @@ public sealed class ChargerClient
     private const double TargetCurrentAmps = 20.0;
     private const double CurrentJitterAmps = 4.0;
     private const double FixedStateOfCharge = 21.0;
-    private static readonly string MeterStateFilePath = Path.Combine(AppContext.BaseDirectory, "meter_state.txt");
 
     private readonly Uri _url;
     private readonly string _identity;
@@ -73,6 +72,7 @@ public sealed class ChargerClient
     private bool _manualSimulationActive;
     private readonly bool _supportSoC;
     private readonly bool _heartbeatEnabled;
+    private readonly string _meterStateFilePath;
     private CancellationToken _runCancellationToken;
     private bool _isRunning;
 
@@ -254,7 +254,7 @@ public sealed class ChargerClient
         return Task.CompletedTask;
     }
 
-    public ChargerClient(Uri url, string identity, string authKey, ChargerIdentity chargerIdentity, string chargePointSerialOverride, string chargeBoxSerialOverride, DualLogger logger, int connectorId = 1, bool supportSoC = false, bool enableHeartbeat = true)
+    public ChargerClient(Uri url, string identity, string authKey, ChargerIdentity chargerIdentity, string chargePointSerialOverride, string chargeBoxSerialOverride, DualLogger logger, string storageDirectory, int connectorId = 1, bool supportSoC = false, bool enableHeartbeat = true)
     {
         _url = url;
         _identity = identity;
@@ -266,6 +266,7 @@ public sealed class ChargerClient
         _connectorId = connectorId;
         _supportSoC = supportSoC;
         _heartbeatEnabled = enableHeartbeat;
+        _meterStateFilePath = Path.Combine(storageDirectory, "meter_state.txt");
         _bootPayload = CreateBootPayload(chargerIdentity, _chargePointSerialOverride, _chargeBoxSerialOverride);
 
         foreach (var kvp in DefaultConfiguration)
@@ -1751,13 +1752,13 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
         return Convert.ToBase64String(credentials);
     }
 
-    private static double LoadMeterAccumulator()
+    private double LoadMeterAccumulator()
     {
         try
         {
-            if (File.Exists(MeterStateFilePath))
+            if (File.Exists(_meterStateFilePath))
             {
-                var text = File.ReadAllText(MeterStateFilePath).Trim();
+                var text = File.ReadAllText(_meterStateFilePath).Trim();
                 if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value >= 0)
                 {
                     return value;
@@ -1775,7 +1776,7 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
     {
         try
         {
-            File.WriteAllText(MeterStateFilePath, _meterAccumulatorWh.ToString("0.###", CultureInfo.InvariantCulture));
+            File.WriteAllText(_meterStateFilePath, _meterAccumulatorWh.ToString("0.###", CultureInfo.InvariantCulture));
         }
         catch (Exception ex)
         {
