@@ -7,6 +7,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Client;
+using MQTTnet.Client.Options;
+using MQTTnet.Client.Subscribing;
 using OcppSimulator;
 
 namespace OcppWeb.Services;
