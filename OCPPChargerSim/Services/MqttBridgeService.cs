@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -8,8 +7,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Client;
-using MQTTnet.Client.Options;
-using MQTTnet.Packets;
 using OcppSimulator;
 
 namespace OcppWeb.Services;
@@ -164,23 +161,25 @@ public sealed class MqttBridgeService : IHostedService, IDisposable
 
     private async Task SubscribeCommandTopicsAsync(IMqttClient client, MqttOptions options, CancellationToken cancellationToken)
     {
-        var filters = new List<MqttTopicFilter>();
+        var builder = new MqttClientSubscribeOptionsBuilder();
+
         if (!string.IsNullOrWhiteSpace(options.StartCommandTopic))
         {
-            filters.Add(new MqttTopicFilterBuilder().WithTopic(options.StartCommandTopic).Build());
+            builder.WithTopicFilter(f => f.WithTopic(options.StartCommandTopic));
         }
 
         if (!string.IsNullOrWhiteSpace(options.StopCommandTopic))
         {
-            filters.Add(new MqttTopicFilterBuilder().WithTopic(options.StopCommandTopic).Build());
+            builder.WithTopicFilter(f => f.WithTopic(options.StopCommandTopic));
         }
 
-        if (filters.Count == 0)
+        var subscribeOptions = builder.Build();
+        if (subscribeOptions.TopicFilters.Count == 0)
         {
             return;
         }
 
-        await client.SubscribeAsync(filters, cancellationToken).ConfigureAwait(false);
+        await client.SubscribeAsync(subscribeOptions, cancellationToken).ConfigureAwait(false);
     }
 
     private Task HandleMessageAsync(MqttApplicationMessageReceivedEventArgs args)
