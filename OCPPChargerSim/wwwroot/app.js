@@ -23,6 +23,15 @@ const configureBtn = document.getElementById("open-config");
 const configChargePointSerialInput = document.getElementById("config-cp-serial");
 const configChargeBoxSerialInput = document.getElementById("config-cb-serial");
 const configCancelButton = document.getElementById("config-cancel");
+const configMqttHostInput = document.getElementById("config-mqtt-host");
+const configMqttPortInput = document.getElementById("config-mqtt-port");
+const configMqttUsernameInput = document.getElementById("config-mqtt-username");
+const configMqttPasswordInput = document.getElementById("config-mqtt-password");
+const configMqttClientIdInput = document.getElementById("config-mqtt-clientid");
+const configMqttStartTopicInput = document.getElementById("config-mqtt-start-topic");
+const configMqttStopTopicInput = document.getElementById("config-mqtt-stop-topic");
+const configMqttStatusTopicInput = document.getElementById("config-mqtt-status-topic");
+const configMqttMeterTopicInput = document.getElementById("config-mqtt-meter-topic");
 
 let logs = [];
 let configuration = {};
@@ -34,8 +43,42 @@ let chargers = [];
 let selectedChargerId = null;
 let chargePointSerialNumber = "0";
 let chargeBoxSerialNumber = "0";
+let mqttOptions = getDefaultMqttOptions();
 
 const maxLogs = 500;
+
+function getDefaultMqttOptions() {
+  return {
+    host: "",
+    port: 1883,
+    username: "",
+    password: "",
+    clientId: "",
+    startCommandTopic: "charger/commands/start",
+    stopCommandTopic: "charger/commands/stop",
+    statusTopic: "charger/status",
+    meterTopic: "charger/meter",
+  };
+}
+
+function normalizeMqttOptions(value) {
+  const defaults = getDefaultMqttOptions();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+
+  return {
+    host: value.host ?? defaults.host,
+    port: Number.isFinite(value.port) ? Number(value.port) : defaults.port,
+    username: value.username ?? defaults.username,
+    password: value.password ?? defaults.password,
+    clientId: value.clientId ?? defaults.clientId,
+    startCommandTopic: value.startCommandTopic || defaults.startCommandTopic,
+    stopCommandTopic: value.stopCommandTopic || defaults.stopCommandTopic,
+    statusTopic: value.statusTopic || defaults.statusTopic,
+    meterTopic: value.meterTopic || defaults.meterTopic,
+  };
+}
 
 function isValidCentralSystemUrl(value) {
   if (!value) {
@@ -166,6 +209,42 @@ function populateConfigurationForm() {
   if (configChargeBoxSerialInput) {
     configChargeBoxSerialInput.value = chargeBoxSerialNumber ?? "0";
   }
+
+  if (configMqttHostInput) {
+    configMqttHostInput.value = mqttOptions.host ?? "";
+  }
+
+  if (configMqttPortInput) {
+    configMqttPortInput.value = mqttOptions.port ?? 1883;
+  }
+
+  if (configMqttUsernameInput) {
+    configMqttUsernameInput.value = mqttOptions.username ?? "";
+  }
+
+  if (configMqttPasswordInput) {
+    configMqttPasswordInput.value = mqttOptions.password ?? "";
+  }
+
+  if (configMqttClientIdInput) {
+    configMqttClientIdInput.value = mqttOptions.clientId ?? "";
+  }
+
+  if (configMqttStartTopicInput) {
+    configMqttStartTopicInput.value = mqttOptions.startCommandTopic ?? "charger/commands/start";
+  }
+
+  if (configMqttStopTopicInput) {
+    configMqttStopTopicInput.value = mqttOptions.stopCommandTopic ?? "charger/commands/stop";
+  }
+
+  if (configMqttStatusTopicInput) {
+    configMqttStatusTopicInput.value = mqttOptions.statusTopic ?? "charger/status";
+  }
+
+  if (configMqttMeterTopicInput) {
+    configMqttMeterTopicInput.value = mqttOptions.meterTopic ?? "charger/meter";
+  }
 }
 
 function showConfigurationModal() {
@@ -232,6 +311,17 @@ function renderConfiguration() {
   entries.push(["Charge Point Serial", chargePointSerialNumber ?? "0"]);
   entries.push(["Charge Box Serial", chargeBoxSerialNumber ?? "0"]);
 
+  if (mqttOptions) {
+    const brokerLabel = mqttOptions.host
+      ? `${mqttOptions.host}:${mqttOptions.port ?? 1883}`
+      : "Not configured";
+    entries.push(["MQTT Broker", brokerLabel]);
+    entries.push(["MQTT Start Topic", mqttOptions.startCommandTopic ?? "—"]);
+    entries.push(["MQTT Stop Topic", mqttOptions.stopCommandTopic ?? "—"]);
+    entries.push(["MQTT Status Topic", mqttOptions.statusTopic ?? "—"]);
+    entries.push(["MQTT Meter Topic", mqttOptions.meterTopic ?? "—"]);
+  }
+
   for (const [key, value] of entries) {
     const row = document.createElement("tr");
     const keyCell = document.createElement("td");
@@ -297,6 +387,8 @@ async function loadSnapshot() {
         authKey: snapshot.connection.authKey ?? "—",
       };
     }
+
+    mqttOptions = normalizeMqttOptions(snapshot.mqtt || {});
 
     if (snapshot.serialNumbers) {
       chargePointSerialNumber = snapshot.serialNumbers.chargePointSerial ?? "0";
@@ -458,6 +550,15 @@ function setupControls(connection) {
     const chargerValue = configChargerSelect.value.trim();
     const cpSerialValue = configChargePointSerialInput ? configChargePointSerialInput.value.trim() : "0";
     const cbSerialValue = configChargeBoxSerialInput ? configChargeBoxSerialInput.value.trim() : "0";
+    const mqttHostValue = configMqttHostInput ? configMqttHostInput.value.trim() : "";
+    const mqttPortValue = configMqttPortInput && configMqttPortInput.value ? parseInt(configMqttPortInput.value, 10) : 1883;
+    const mqttUsernameValue = configMqttUsernameInput ? configMqttUsernameInput.value.trim() : "";
+    const mqttPasswordValue = configMqttPasswordInput ? configMqttPasswordInput.value : "";
+    const mqttClientIdValue = configMqttClientIdInput ? configMqttClientIdInput.value.trim() : "";
+    const mqttStartTopicValue = configMqttStartTopicInput ? configMqttStartTopicInput.value.trim() : "";
+    const mqttStopTopicValue = configMqttStopTopicInput ? configMqttStopTopicInput.value.trim() : "";
+    const mqttStatusTopicValue = configMqttStatusTopicInput ? configMqttStatusTopicInput.value.trim() : "";
+    const mqttMeterTopicValue = configMqttMeterTopicInput ? configMqttMeterTopicInput.value.trim() : "";
 
     if (!isValidCentralSystemUrl(urlValue)) {
       if (configErrorEl) {
@@ -475,6 +576,28 @@ function setupControls(connection) {
       return;
     }
 
+    if (Number.isNaN(mqttPortValue) || mqttPortValue <= 0 || mqttPortValue > 65535) {
+      if (configErrorEl) {
+        configErrorEl.textContent = "Please enter a valid MQTT port.";
+      }
+      if (configMqttPortInput) {
+        configMqttPortInput.focus();
+      }
+      return;
+    }
+
+    const mqttPayload = {
+      host: mqttHostValue,
+      port: mqttPortValue || 1883,
+      username: mqttUsernameValue,
+      password: mqttPasswordValue,
+      clientId: mqttClientIdValue,
+      startCommandTopic: mqttStartTopicValue || "charger/commands/start",
+      stopCommandTopic: mqttStopTopicValue || "charger/commands/stop",
+      statusTopic: mqttStatusTopicValue || "charger/status",
+      meterTopic: mqttMeterTopicValue || "charger/meter",
+    };
+
     const payload = {
       url: urlValue,
       identity: identityValue,
@@ -482,6 +605,7 @@ function setupControls(connection) {
       chargerId: chargerValue,
       chargePointSerialNumber: cpSerialValue,
       chargeBoxSerialNumber: cbSerialValue,
+      mqtt: mqttPayload,
     };
 
     const submitButton = configForm.querySelector("button[type='submit']");
@@ -496,6 +620,7 @@ function setupControls(connection) {
       selectedChargerId = chargerValue;
       chargePointSerialNumber = cpSerialValue || "0";
       chargeBoxSerialNumber = cbSerialValue || "0";
+      mqttOptions = normalizeMqttOptions(mqttPayload);
       await postJson("/api/bootstrap", payload);
       await loadSnapshot();
       setConfigurationRequirement(false);

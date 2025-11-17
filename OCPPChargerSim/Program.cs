@@ -24,6 +24,8 @@ builder.Services.AddSingleton<SimulatorState>();
 builder.Services.AddSingleton<SimulatorCoordinator>();
 builder.Services.AddSingleton(sp => new SimulatorConfigurationProvider(builder.Configuration, storageOptions.DataDirectory, chargerCatalog));
 builder.Services.AddHostedService<SimulatorHostedService>();
+builder.Services.AddSingleton<MqttBridgeService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBridgeService>());
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -155,6 +157,7 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
             timestamp = sample.Timestamp,
         },
         connection = new { url, identity, authKey },
+        mqtt = state.GetMqttOptions(),
         loggingEnabled = state.LoggingEnabled,
         requiresConfiguration,
         configurationFileMissing = configFileMissing,
@@ -194,12 +197,27 @@ app.MapPost("/api/bootstrap", async (BootstrapRequest request, SimulatorConfigur
         ChargerId = request.ChargerId,
         ChargePointSerialNumber = cpSerial,
         ChargeBoxSerialNumber = cbSerial,
+        Mqtt = request.Mqtt is null
+            ? new MqttOptions()
+            : new MqttOptions
+            {
+                Host = request.Mqtt.Host,
+                Port = request.Mqtt.Port,
+                Username = request.Mqtt.Username,
+                Password = request.Mqtt.Password,
+                ClientId = request.Mqtt.ClientId,
+                StartCommandTopic = request.Mqtt.StartCommandTopic,
+                StopCommandTopic = request.Mqtt.StopCommandTopic,
+                StatusTopic = request.Mqtt.StatusTopic,
+                MeterTopic = request.Mqtt.MeterTopic,
+            },
     }, cancellationToken).ConfigureAwait(false);
 
     state.SetConfigurationRequirement(snapshot.RequiresConfiguration, snapshot.ConfigurationFileMissing);
     state.SetConnectionDetails(snapshot.Options.Url ?? "—", snapshot.Options.Identity ?? "—", snapshot.Options.AuthKey ?? "—");
     state.SetSelectedCharger(snapshot.Options.ChargerId);
     state.SetSerialNumbers(snapshot.Options.ChargePointSerialNumber ?? "0", snapshot.Options.ChargeBoxSerialNumber ?? "0");
+    state.SetMqttOptions(snapshot.Options.Mqtt);
 
     return Results.Accepted();
 });
@@ -227,4 +245,15 @@ record ConfigurationRequest(string Key, string Value);
 
 record LoggingRequest(bool Enabled);
 
-record BootstrapRequest(string Url, string Identity, string AuthKey, string ChargerId, string ChargePointSerialNumber, string ChargeBoxSerialNumber);
+record BootstrapRequest(string Url, string Identity, string AuthKey, string ChargerId, string ChargePointSerialNumber, string ChargeBoxSerialNumber, MqttBootstrapRequest? Mqtt);
+
+record MqttBootstrapRequest(
+    string? Host,
+    int Port,
+    string? Username,
+    string? Password,
+    string? ClientId,
+    string? StartCommandTopic,
+    string? StopCommandTopic,
+    string? StatusTopic,
+    string? MeterTopic);

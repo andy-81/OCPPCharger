@@ -22,6 +22,7 @@ public sealed class SimulatorState
     private string? _selectedChargerId;
     private string _chargePointSerial = "0";
     private string _chargeBoxSerial = "0";
+    private MqttOptions _mqttOptions = new();
 
     public void AddLog(string message)
     {
@@ -179,6 +180,33 @@ public sealed class SimulatorState
             {
                 return (_requiresConfiguration, _configurationFileMissing);
             }
+        }
+    }
+
+    public void SetMqttOptions(MqttOptions options)
+    {
+        lock (_sync)
+        {
+            _mqttOptions = options ?? new MqttOptions();
+        }
+    }
+
+    public MqttOptions GetMqttOptions()
+    {
+        lock (_sync)
+        {
+            return new MqttOptions
+            {
+                Host = _mqttOptions.Host,
+                Port = _mqttOptions.Port,
+                Username = _mqttOptions.Username,
+                Password = _mqttOptions.Password,
+                ClientId = _mqttOptions.ClientId,
+                StartCommandTopic = _mqttOptions.StartCommandTopic,
+                StopCommandTopic = _mqttOptions.StopCommandTopic,
+                StatusTopic = _mqttOptions.StatusTopic,
+                MeterTopic = _mqttOptions.MeterTopic,
+            };
         }
     }
 

@@ -105,6 +105,42 @@
             <input type="text" id="config-auth" required />
           </label>
           <label>
+            <span>MQTT Host</span>
+            <input type="text" id="config-mqtt-host" placeholder="broker hostname" />
+          </label>
+          <label>
+            <span>MQTT Port</span>
+            <input type="number" id="config-mqtt-port" min="1" max="65535" value="1883" />
+          </label>
+          <label>
+            <span>MQTT Username</span>
+            <input type="text" id="config-mqtt-username" />
+          </label>
+          <label>
+            <span>MQTT Password</span>
+            <input type="password" id="config-mqtt-password" />
+          </label>
+          <label>
+            <span>MQTT Client Id</span>
+            <input type="text" id="config-mqtt-clientid" />
+          </label>
+          <label>
+            <span>Start Command Topic</span>
+            <input type="text" id="config-mqtt-start-topic" placeholder="charger/commands/start" />
+          </label>
+          <label>
+            <span>Stop Command Topic</span>
+            <input type="text" id="config-mqtt-stop-topic" placeholder="charger/commands/stop" />
+          </label>
+          <label>
+            <span>Status Topic</span>
+            <input type="text" id="config-mqtt-status-topic" placeholder="charger/status" />
+          </label>
+          <label>
+            <span>Meter Topic</span>
+            <input type="text" id="config-mqtt-meter-topic" placeholder="charger/meter" />
+          </label>
+          <label>
             <span>Charge Point Serial Number</span>
             <input type="text" id="config-cp-serial" required />
           </label>

@@ -10,6 +10,7 @@
     <Content Update="chargers.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <PackageReference Include="MQTTnet" Version="4.3.9" />
   </ItemGroup>
 
 </Project>
