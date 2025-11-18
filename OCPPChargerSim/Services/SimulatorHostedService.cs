@@ -19,6 +19,7 @@ public sealed class SimulatorHostedService : BackgroundService
     private readonly SimulatorConfigurationProvider _configurationProvider;
     private readonly SimulatorStorageOptions _storageOptions;
     private readonly ChargerCatalog _catalog;
+    private readonly MqttBridgeService _mqttBridge;
 
     public SimulatorHostedService(
         SimulatorCoordinator coordinator,
@@ -27,6 +28,7 @@ public sealed class SimulatorHostedService : BackgroundService
         SimulatorConfigurationProvider configurationProvider,
         ChargerCatalog catalog,
         SimulatorStorageOptions storageOptions,
+        MqttBridgeService mqttBridge,
         ILogger<SimulatorHostedService> logger)
     {
         _coordinator = coordinator;
@@ -36,6 +38,7 @@ public sealed class SimulatorHostedService : BackgroundService
         _configurationProvider = configurationProvider;
         _catalog = catalog;
         _storageOptions = storageOptions;
+        _mqttBridge = mqttBridge;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -46,6 +49,7 @@ public sealed class SimulatorHostedService : BackgroundService
             _state.SetConfigurationRequirement(snapshot.RequiresConfiguration, snapshot.ConfigurationFileMissing);
             _state.SetSelectedCharger(_catalog.TryGet(snapshot.Options.ChargerId, out _) ? snapshot.Options.ChargerId : null);
             _state.SetSerialNumbers(snapshot.Options.ChargePointSerialNumber ?? "0", snapshot.Options.ChargeBoxSerialNumber ?? "0");
+            _state.SetMqttOptions(snapshot.Options.Mqtt);
 
             if (snapshot.RequiresConfiguration)
             {
@@ -140,6 +144,8 @@ public sealed class SimulatorHostedService : BackgroundService
         _state.SetSelectedCharger(charger.Id);
         _state.SetSerialNumbers(options.ChargePointSerialNumber ?? "0", options.ChargeBoxSerialNumber ?? "0");
         _state.SetConfigurationRequirement(false, snapshot.ConfigurationFileMissing);
+        _ = _mqttBridge.PublishVehicleStateAsync(client.VehicleState, stoppingToken);
+        _ = _mqttBridge.PublishMeterSampleAsync(client.LatestSample, stoppingToken);
 
         logger.MessageLogged += OnMessageLogged;
         client.VehicleStateChanged += OnVehicleStateChanged;
@@ -176,6 +182,7 @@ public sealed class SimulatorHostedService : BackgroundService
     {
         _state.SetVehicleState(state);
         _ = _hubContext.Clients.All.VehicleStateChanged(state);
+        _ = _mqttBridge.PublishVehicleStateAsync(state, CancellationToken.None);
     }
 
     private void OnConfigurationChanged(string key, string value)
@@ -188,5 +195,6 @@ public sealed class SimulatorHostedService : BackgroundService
     {
         _state.SetMetrics(sample);
         _ = _hubContext.Clients.All.MeterValuesUpdated(new MeterSnapshotDto(sample.EnergyWh, sample.PowerKw, sample.CurrentAmps, sample.StateOfCharge >= 0 ? sample.StateOfCharge : null, sample.Timestamp));
+        _ = _mqttBridge.PublishMeterSampleAsync(sample, CancellationToken.None);
     }
 }

@@ -140,6 +140,18 @@ public sealed class SimulatorConfigurationProvider
             ["ChargerId"] = normalized.ChargerId,
             ["ChargePointSerialNumber"] = normalized.ChargePointSerialNumber,
             ["ChargeBoxSerialNumber"] = normalized.ChargeBoxSerialNumber,
+            ["Mqtt"] = new Dictionary<string, object?>
+            {
+                ["Host"] = normalized.Mqtt.Host,
+                ["Port"] = normalized.Mqtt.Port,
+                ["Username"] = normalized.Mqtt.Username,
+                ["Password"] = normalized.Mqtt.Password,
+                ["ClientId"] = normalized.Mqtt.ClientId,
+                ["StartCommandTopic"] = normalized.Mqtt.StartCommandTopic,
+                ["StopCommandTopic"] = normalized.Mqtt.StopCommandTopic,
+                ["StatusTopic"] = normalized.Mqtt.StatusTopic,
+                ["MeterTopic"] = normalized.Mqtt.MeterTopic,
+            },
         };
 
         var json = JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -184,6 +196,16 @@ public sealed class SimulatorConfigurationProvider
         var chargePointSerial = string.IsNullOrWhiteSpace(options.ChargePointSerialNumber) ? "0" : options.ChargePointSerialNumber.Trim();
         var chargeBoxSerial = string.IsNullOrWhiteSpace(options.ChargeBoxSerialNumber) ? "0" : options.ChargeBoxSerialNumber.Trim();
 
+        var mqttOptions = options.Mqtt ?? new MqttOptions();
+        var mqttHost = string.IsNullOrWhiteSpace(mqttOptions.Host) ? null : mqttOptions.Host.Trim();
+        var mqttUsername = string.IsNullOrWhiteSpace(mqttOptions.Username) ? null : mqttOptions.Username.Trim();
+        var mqttPassword = string.IsNullOrWhiteSpace(mqttOptions.Password) ? null : mqttOptions.Password;
+        var mqttClientId = string.IsNullOrWhiteSpace(mqttOptions.ClientId) ? null : mqttOptions.ClientId.Trim();
+        var mqttStartTopic = string.IsNullOrWhiteSpace(mqttOptions.StartCommandTopic) ? "charger/commands/start" : mqttOptions.StartCommandTopic.Trim();
+        var mqttStopTopic = string.IsNullOrWhiteSpace(mqttOptions.StopCommandTopic) ? "charger/commands/stop" : mqttOptions.StopCommandTopic.Trim();
+        var mqttStatusTopic = string.IsNullOrWhiteSpace(mqttOptions.StatusTopic) ? "charger/status" : mqttOptions.StatusTopic.Trim();
+        var mqttMeterTopic = string.IsNullOrWhiteSpace(mqttOptions.MeterTopic) ? "charger/meter" : mqttOptions.MeterTopic.Trim();
+
         return new SimulatorOptions
         {
             Url = string.IsNullOrWhiteSpace(options.Url) ? null : options.Url.Trim(),
@@ -195,6 +217,18 @@ public sealed class SimulatorConfigurationProvider
             ChargerId = chargerId,
             ChargePointSerialNumber = chargePointSerial,
             ChargeBoxSerialNumber = chargeBoxSerial,
+            Mqtt = new MqttOptions
+            {
+                Host = mqttHost,
+                Port = mqttOptions.Port > 0 ? mqttOptions.Port : 1883,
+                Username = mqttUsername,
+                Password = mqttPassword,
+                ClientId = mqttClientId,
+                StartCommandTopic = mqttStartTopic,
+                StopCommandTopic = mqttStopTopic,
+                StatusTopic = mqttStatusTopic,
+                MeterTopic = mqttMeterTopic,
+            },
         };
     }
 
@@ -219,6 +253,18 @@ public sealed class SimulatorConfigurationProvider
             ChargerId = options.ChargerId,
             ChargePointSerialNumber = options.ChargePointSerialNumber,
             ChargeBoxSerialNumber = options.ChargeBoxSerialNumber,
+            Mqtt = new MqttOptions
+            {
+                Host = options.Mqtt.Host,
+                Port = options.Mqtt.Port,
+                Username = options.Mqtt.Username,
+                Password = options.Mqtt.Password,
+                ClientId = options.Mqtt.ClientId,
+                StartCommandTopic = options.Mqtt.StartCommandTopic,
+                StopCommandTopic = options.Mqtt.StopCommandTopic,
+                StatusTopic = options.Mqtt.StatusTopic,
+                MeterTopic = options.Mqtt.MeterTopic,
+            },
         };
     }
 
