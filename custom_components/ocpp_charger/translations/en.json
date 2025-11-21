@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OCPP Charger Simulator",
+        "description": "Mirror Home Assistant entities to the OCPP charger simulator.",
+        "data": {
+          "name": "Entry name",
+          "base_url": "Simulator base URL",
+          "energy_entity_id": "Energy entity (Wh)",
+          "power_entity_id": "Power entity (kW)",
+          "current_entity_id": "Current entity (A)",
+          "soc_entity_id": "State of charge entity (%)",
+          "status_entity_id": "Status/connection entity",
+          "connected_value": "Entity value meaning connected",
+          "disconnected_value": "Entity value meaning disconnected",
+          "connected_status": "OCPP status when connected",
+          "disconnected_status": "OCPP status when disconnected"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OCPP Charger Simulator options",
+        "description": "Update entity mappings and status values.",
+        "data": {
+          "base_url": "Simulator base URL",
+          "energy_entity_id": "Energy entity (Wh)",
+          "power_entity_id": "Power entity (kW)",
+          "current_entity_id": "Current entity (A)",
+          "soc_entity_id": "State of charge entity (%)",
+          "status_entity_id": "Status/connection entity",
+          "connected_value": "Entity value meaning connected",
+          "disconnected_value": "Entity value meaning disconnected",
+          "connected_status": "OCPP status when connected",
+          "disconnected_status": "OCPP status when disconnected"
+        }
+      }
+    }
+  }
+}

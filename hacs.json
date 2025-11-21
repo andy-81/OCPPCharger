@@ -1,0 +1,6 @@
+{
+  "name": "OCPP Charger Simulator",
+  "content_in_root": false,
+  "domains": ["ocpp_charger"],
+  "country": "ALL"
+}

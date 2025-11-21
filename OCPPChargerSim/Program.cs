@@ -3,10 +3,12 @@ using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OcppWeb.Hubs;
 using OcppWeb.Services;
+using OcppSimulator;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -171,6 +173,34 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
     });
 });
 
+app.MapPost("/api/metrics", (MetricsRequest request, SimulatorState state, IHubContext<SimulatorHub> hubContext) =>
+{
+    var current = state.LatestSample;
+
+    if (request.EnergyWh is null && request.PowerKw is null && request.CurrentAmps is null && request.StateOfCharge is null)
+    {
+        return Results.BadRequest(new { error = "At least one metric value must be provided." });
+    }
+
+    var sample = new MeterSample(
+        request.EnergyWh ?? current.EnergyWh,
+        request.PowerKw ?? current.PowerKw,
+        request.CurrentAmps ?? current.CurrentAmps,
+        request.StateOfCharge ?? current.StateOfCharge,
+        DateTimeOffset.UtcNow);
+
+    state.SetMetrics(sample);
+
+    _ = hubContext.Clients.All.MeterValuesUpdated(new MeterSnapshotDto(
+        sample.EnergyWh,
+        sample.PowerKw,
+        sample.CurrentAmps,
+        sample.StateOfCharge >= 0 ? sample.StateOfCharge : null,
+        sample.Timestamp));
+
+    return Results.Accepted();
+});
+
 app.MapPost("/api/bootstrap", async (BootstrapRequest request, SimulatorConfigurationProvider provider, SimulatorState state, ChargerCatalog catalog, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.Url) || string.IsNullOrWhiteSpace(request.Identity) || string.IsNullOrWhiteSpace(request.AuthKey))
@@ -228,3 +258,5 @@ record ConfigurationRequest(string Key, string Value);
 record LoggingRequest(bool Enabled);
 
 record BootstrapRequest(string Url, string Identity, string AuthKey, string ChargerId, string ChargePointSerialNumber, string ChargeBoxSerialNumber);
+
+record MetricsRequest(double? EnergyWh, double? PowerKw, double? CurrentAmps, double? StateOfCharge);
