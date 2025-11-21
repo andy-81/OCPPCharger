@@ -34,6 +34,24 @@ docker run --rm -p 5000:5000 -v $(pwd)/sim-data:/app/data ocpp-charger-sim
 
 On first launch, the configuration dialog appears automatically. Enter the OCPP server URL, charge point identity, authorization key, charger type, and serial numbers. The settings are saved to `simulator.json`.
 
+## Home Assistant (HACS) integration
+
+A custom Home Assistant integration is included under `custom_components/ocpp_charger` so you can drive the simulator directly from Home Assistant entities.
+
+1. Add this repository as a [HACS](https://hacs.xyz/) custom repository (category: **Integration**).
+2. Install **OCPP Charger Simulator** from HACS and restart Home Assistant.
+3. In *Settings → Devices & Services*, add a new **OCPP Charger Simulator** integration and supply:
+   - The simulator base URL (default `http://localhost:5000`).
+   - Optional entity IDs for energy (Wh), power (kW), current (A), and state-of-charge metrics.
+   - An optional status/connection entity plus the values that represent connected/disconnected so the integration can post OCPP status updates automatically.
+
+When any mapped entity updates, the integration mirrors the values to the simulator through its REST API so the web dashboard and log stream stay in sync with your automations.
+
+### REST API helpers for automations
+
+- `POST /api/metrics` with any of `energyWh`, `powerKw`, `currentAmps`, and `stateOfCharge` fields overrides the current meter sample (partial updates are accepted).
+- `POST /api/status` with `{ "status": "Charging" }` (or another OCPP status) triggers a manual status notification.
+
 ## Files of Note
 - `OCPPChargerSim/` – ASP.NET Core web host, SignalR hub, services, and static UI assets.
 - `OCPPChargerSim/Simulator/` – OCPP simulator logic and supporting classes.
