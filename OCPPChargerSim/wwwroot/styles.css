@@ -311,12 +311,27 @@ button:active {
   color: #e5e7eb;
 }
 
+.split-row {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .split-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 #config-form input {
   padding: 0.45rem 0.6rem;
   border-radius: 6px;
   border: 1px solid #1f2937;
   background: #0f172a;
   color: #f9fafb;
+}
+
+.input-error {
+  border-color: #f87171;
 }
 
 #config-form select {

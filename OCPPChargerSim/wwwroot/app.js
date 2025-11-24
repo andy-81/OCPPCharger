@@ -23,6 +23,9 @@ const configureBtn = document.getElementById("open-config");
 const configChargePointSerialInput = document.getElementById("config-cp-serial");
 const configChargeBoxSerialInput = document.getElementById("config-cb-serial");
 const configCancelButton = document.getElementById("config-cancel");
+const configMeterValuesSampledInput = document.getElementById("config-meter-values-sampled");
+const configMeterValueSampleIntervalInput = document.getElementById("config-meter-value-sample-interval");
+const configClockAlignedDataIntervalInput = document.getElementById("config-clock-aligned-data-interval");
 
 let logs = [];
 let configuration = {};
@@ -34,6 +37,9 @@ let chargers = [];
 let selectedChargerId = null;
 let chargePointSerialNumber = "0";
 let chargeBoxSerialNumber = "0";
+let meterValuesSampledData = "";
+let meterValueSampleInterval = 0;
+let clockAlignedDataInterval = 0;
 
 const maxLogs = 500;
 
@@ -166,6 +172,18 @@ function populateConfigurationForm() {
   if (configChargeBoxSerialInput) {
     configChargeBoxSerialInput.value = chargeBoxSerialNumber ?? "0";
   }
+
+  if (configMeterValuesSampledInput) {
+    configMeterValuesSampledInput.value = meterValuesSampledData ?? "";
+  }
+
+  if (configMeterValueSampleIntervalInput) {
+    configMeterValueSampleIntervalInput.value = meterValueSampleInterval > 0 ? meterValueSampleInterval : "";
+  }
+
+  if (configClockAlignedDataIntervalInput) {
+    configClockAlignedDataIntervalInput.value = clockAlignedDataInterval > 0 ? clockAlignedDataInterval : "";
+  }
 }
 
 function showConfigurationModal() {
@@ -175,9 +193,7 @@ function showConfigurationModal() {
 
   renderChargerOptions();
   populateConfigurationForm();
-  if (configErrorEl) {
-    configErrorEl.textContent = "";
-  }
+  clearConfigurationValidation();
   configModal.classList.remove("hidden");
 }
 
@@ -187,6 +203,37 @@ function hideConfigurationModal() {
   }
 
   configModal.classList.add("hidden");
+}
+
+function clearConfigurationValidation() {
+  if (configErrorEl) {
+    configErrorEl.textContent = "";
+  }
+
+  [
+    configUrlInput,
+    configIdentityInput,
+    configAuthInput,
+    configChargerSelect,
+    configChargePointSerialInput,
+    configChargeBoxSerialInput,
+    configMeterValuesSampledInput,
+    configMeterValueSampleIntervalInput,
+    configClockAlignedDataIntervalInput,
+  ].forEach((input) => {
+    input?.classList.remove("input-error");
+  });
+}
+
+function showConfigurationError(message, input) {
+  if (configErrorEl) {
+    configErrorEl.textContent = message;
+  }
+
+  if (input) {
+    input.classList.add("input-error");
+    input.focus();
+  }
 }
 
 function setConfigurationRequirement(required) {
@@ -231,6 +278,15 @@ function renderConfiguration() {
 
   entries.push(["Charge Point Serial", chargePointSerialNumber ?? "0"]);
   entries.push(["Charge Box Serial", chargeBoxSerialNumber ?? "0"]);
+  if (meterValuesSampledData) {
+    entries.push(["Meter Values Sampled Data", meterValuesSampledData]);
+  }
+  if (meterValueSampleInterval > 0) {
+    entries.push(["Meter Value Sample Interval", `${meterValueSampleInterval} seconds`]);
+  }
+  if (clockAlignedDataInterval > 0) {
+    entries.push(["Clock Aligned Data Interval", `${clockAlignedDataInterval} seconds`]);
+  }
 
   for (const [key, value] of entries) {
     const row = document.createElement("tr");
@@ -301,6 +357,20 @@ async function loadSnapshot() {
     if (snapshot.serialNumbers) {
       chargePointSerialNumber = snapshot.serialNumbers.chargePointSerial ?? "0";
       chargeBoxSerialNumber = snapshot.serialNumbers.chargeBoxSerial ?? "0";
+    }
+
+    if (snapshot.meterValuesConfiguration) {
+      const meterConfig = snapshot.meterValuesConfiguration;
+      meterValuesSampledData = meterConfig.meter_values_sampled_data ?? meterConfig.sampledData ?? "";
+      const parsedSampleInterval = Number(
+        meterConfig.meter_value_sample_interval ?? meterConfig.sampleInterval ?? 0,
+      );
+      meterValueSampleInterval = Number.isFinite(parsedSampleInterval) ? parsedSampleInterval : 0;
+
+      const parsedClockAlignedInterval = Number(
+        meterConfig.clock_aligned_data_interval ?? meterConfig.clockAlignedDataInterval ?? 0,
+      );
+      clockAlignedDataInterval = Number.isFinite(parsedClockAlignedInterval) ? parsedClockAlignedInterval : 0;
     }
 
     if (typeof snapshot.loggingEnabled === "boolean") {
@@ -452,26 +522,45 @@ function setupControls(connection) {
       return;
     }
 
+    clearConfigurationValidation();
+
     const urlValue = configUrlInput.value.trim();
     const identityValue = configIdentityInput.value.trim();
     const authKeyValue = configAuthInput.value.trim();
     const chargerValue = configChargerSelect.value.trim();
     const cpSerialValue = configChargePointSerialInput ? configChargePointSerialInput.value.trim() : "0";
     const cbSerialValue = configChargeBoxSerialInput ? configChargeBoxSerialInput.value.trim() : "0";
+    const meterValuesCsv = configMeterValuesSampledInput ? configMeterValuesSampledInput.value.trim() : "";
+    const sampleIntervalValue = configMeterValueSampleIntervalInput
+      ? Number.parseInt(configMeterValueSampleIntervalInput.value, 10)
+      : NaN;
+    const clockAlignedIntervalValue = configClockAlignedDataIntervalInput
+      ? Number.parseInt(configClockAlignedDataIntervalInput.value, 10)
+      : NaN;
 
     if (!isValidCentralSystemUrl(urlValue)) {
-      if (configErrorEl) {
-        configErrorEl.textContent = "Please enter a valid ws:// or wss:// URL.";
-      }
-      configUrlInput.focus();
+      showConfigurationError("Please enter a valid ws:// or wss:// URL.", configUrlInput);
       return;
     }
 
     if (!chargerValue) {
-      if (configErrorEl) {
-        configErrorEl.textContent = "Please select a charger type.";
-      }
-      configChargerSelect.focus();
+      showConfigurationError("Please select a charger type.", configChargerSelect);
+      return;
+    }
+
+    if (!Number.isFinite(sampleIntervalValue) || sampleIntervalValue <= 0) {
+      showConfigurationError(
+        "Meter Value Sample Interval must be greater than zero.",
+        configMeterValueSampleIntervalInput,
+      );
+      return;
+    }
+
+    if (!Number.isFinite(clockAlignedIntervalValue) || clockAlignedIntervalValue <= 0) {
+      showConfigurationError(
+        "Clock Aligned Data Interval must be greater than zero.",
+        configClockAlignedDataIntervalInput,
+      );
       return;
     }
 
@@ -482,20 +571,23 @@ function setupControls(connection) {
       chargerId: chargerValue,
       chargePointSerialNumber: cpSerialValue,
       chargeBoxSerialNumber: cbSerialValue,
+      meterValuesSampledData: meterValuesCsv,
+      meterValueSampleInterval: sampleIntervalValue,
+      clockAlignedDataInterval: clockAlignedIntervalValue,
     };
 
     const submitButton = configForm.querySelector("button[type='submit']");
     if (submitButton) {
       submitButton.disabled = true;
     }
-    if (configErrorEl) {
-      configErrorEl.textContent = "";
-    }
 
     try {
       selectedChargerId = chargerValue;
       chargePointSerialNumber = cpSerialValue || "0";
       chargeBoxSerialNumber = cbSerialValue || "0";
+      meterValuesSampledData = meterValuesCsv;
+      meterValueSampleInterval = sampleIntervalValue;
+      clockAlignedDataInterval = clockAlignedIntervalValue;
       await postJson("/api/bootstrap", payload);
       await loadSnapshot();
       setConfigurationRequirement(false);
