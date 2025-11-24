@@ -56,6 +56,7 @@ public sealed class ChargerClient
     private readonly int _connectorId;
     private readonly Vehicle _vehicle = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pendingCalls = new();
+    private readonly ConcurrentDictionary<string, PendingStartTransaction> _pendingStartTransactions = new();
     private readonly Dictionary<string, string> _configuration = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _bootPayload;
     private readonly HashSet<string> _localAuthorizationList = new(StringComparer.OrdinalIgnoreCase);
@@ -85,6 +86,8 @@ public sealed class ChargerClient
         User,
         Remote,
     }
+
+    private sealed record PendingStartTransaction(string UniqueId, string IdTag);
 
     private StateInitiator _lastStateInitiator = StateInitiator.System;
 
@@ -520,7 +523,7 @@ public sealed class ChargerClient
                     await HandleCallAsync(root, cancellationToken).ConfigureAwait(false);
                     break;
                 case 3:
-                    HandleCallResult(root);
+                    await HandleCallResultAsync(root, cancellationToken).ConfigureAwait(false);
                     break;
                 case 4:
                     HandleCallError(root);
@@ -663,6 +666,8 @@ public sealed class ChargerClient
     {
         var uniqueId = GenerateUniqueId();
         var tcs = RegisterCall(uniqueId);
+        var pendingStart = new PendingStartTransaction(uniqueId, idTag);
+        _pendingStartTransactions[uniqueId] = pendingStart;
 
         _meterStartValue = (int)Math.Round(_meterAccumulatorWh, MidpointRounding.AwayFromZero);
         _meterValue = _meterStartValue;
@@ -684,36 +689,62 @@ public sealed class ChargerClient
 
         await SendCallAsync(uniqueId, "StartTransaction", request, cancellationToken).ConfigureAwait(false);
 
+        var keepPendingForLateResponse = false;
         try
         {
             var completed = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(35), cancellationToken));
             if (completed != tcs.Task)
             {
-                _logger.Error("StartTransaction response timed out");
-                return false;
+                _logger.Warn("StartTransaction response timed out; awaiting potential late confirmation while continuing.");
+                keepPendingForLateResponse = true;
+                return true;
             }
 
             var response = await tcs.Task.ConfigureAwait(false);
+            return await ApplyStartTransactionResponseAsync(uniqueId, response, pendingStart, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!keepPendingForLateResponse)
+            {
+                _pendingStartTransactions.TryRemove(uniqueId, out _);
+            }
 
+            _pendingCalls.TryRemove(uniqueId, out _);
+        }
+    }
+
+    private async Task<bool> ApplyStartTransactionResponseAsync(string uniqueId, JsonElement response, PendingStartTransaction pendingStart, CancellationToken cancellationToken)
+    {
+        try
+        {
             if (!TryGetInt32(response, "transactionId", out var transactionId))
             {
                 _logger.Error($"StartTransaction missing transactionId: {response.ToString()}");
                 return false;
             }
 
-            if (response.ValueKind == JsonValueKind.Object && response.TryGetProperty("idTagInfo", out var idTagInfo) && TryGetString(idTagInfo, "status", out var status) && !string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase))
+            var status = "Accepted";
+            if (response.ValueKind == JsonValueKind.Object && response.TryGetProperty("idTagInfo", out var idTagInfo) && TryGetString(idTagInfo, "status", out var parsedStatus))
             {
-                _logger.Error($"StartTransaction rejected with status: {status}");
-                return false;
+                status = parsedStatus;
             }
 
             _activeTransactionId = transactionId;
-            _logger.Info($"Transaction {transactionId} started for idTag {idTag}");
-            return true;
+            _logger.Info($"StartTransaction confirmation received for idTag {pendingStart.IdTag} with transaction {transactionId} (status: {status}).");
+
+            if (string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            _logger.Warn($"StartTransaction returned status {status}; stopping charging session.");
+            await StopChargingSequenceAsync("DeAuthorized", _lastStateInitiator, cancellationToken).ConfigureAwait(false);
+            return false;
         }
         finally
         {
-            _pendingCalls.TryRemove(uniqueId, out _);
+            _pendingStartTransactions.TryRemove(uniqueId, out _);
         }
     }
 
@@ -1560,7 +1591,7 @@ public sealed class ChargerClient
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private void HandleCallResult(JsonElement message)
+    private async Task HandleCallResultAsync(JsonElement message, CancellationToken cancellationToken)
     {
         if (message.GetArrayLength() < 3)
         {
@@ -1574,9 +1605,20 @@ public sealed class ChargerClient
             return;
         }
 
-        if (_pendingCalls.TryRemove(uniqueId, out var tcs) && !tcs.Task.IsCompleted)
+        var payload = message[2].Clone();
+        var pendingCall = _pendingCalls.TryGetValue(uniqueId, out var tcs) ? tcs : null;
+        var hadPendingCall = pendingCall is not null;
+
+        if (pendingCall is not null && !pendingCall.Task.IsCompleted)
         {
-            tcs.TrySetResult(message[2].Clone());
+            pendingCall.TrySetResult(payload);
+        }
+
+        _pendingCalls.TryRemove(uniqueId, out _);
+
+        if (_pendingStartTransactions.TryGetValue(uniqueId, out var pendingStart) && !hadPendingCall)
+        {
+            await ApplyStartTransactionResponseAsync(uniqueId, payload, pendingStart, cancellationToken).ConfigureAwait(false);
         }
     }
 
