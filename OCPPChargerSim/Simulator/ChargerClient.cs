@@ -809,7 +809,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
                         break;
                     }
 
-                    await SendMeterValuesAsync(loopToken).ConfigureAwait(false);
+                    await SendMeterValuesAsync(loopToken, clockAligned: true).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (loopToken.IsCancellationRequested)
@@ -841,6 +841,17 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             _clockAlignedLoopCts.Dispose();
             _clockAlignedLoopCts = null;
         }
+    }
+
+    private void RestartMeterValueLoops(CancellationToken parentToken)
+    {
+        if (!_activeTransactionId.HasValue)
+        {
+            return;
+        }
+
+        StartMeterValueLoop(parentToken);
+        StartClockAlignedMeterValueLoop(parentToken);
     }
 
     private void StartHeartbeatLoop(CancellationToken parentToken)
@@ -909,7 +920,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         }
     }
 
-    private async Task SendMeterValuesAsync(CancellationToken cancellationToken)
+    private async Task SendMeterValuesAsync(CancellationToken cancellationToken, bool clockAligned = false)
     {
         if (!_activeTransactionId.HasValue)
         {
@@ -923,7 +934,8 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         double elapsedSeconds;
         if (_lastMeterSampleTimestamp == DateTimeOffset.MinValue)
         {
-            elapsedSeconds = GetMeterSampleInterval().TotalSeconds;
+            var defaultInterval = clockAligned ? GetClockAlignedInterval() : GetMeterSampleInterval();
+            elapsedSeconds = defaultInterval.TotalSeconds;
             if (elapsedSeconds <= 0)
             {
                 elapsedSeconds = 1.0;
@@ -953,7 +965,18 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         _meterValue = (int)Math.Round(_meterAccumulatorWh);
         var energyWhValue = Math.Round(_meterAccumulatorWh, 0, MidpointRounding.AwayFromZero);
         var socValue = FixedStateOfCharge;
-        var sampledData = GetMeterValuesSampledData();
+        var sampledData = clockAligned ? GetMeterValuesAlignedData() : GetMeterValuesSampledData();
+        if (clockAligned && sampledData.Count == 0)
+        {
+            sampledData = GetMeterValuesSampledData();
+        }
+
+        if (sampledData.Count == 0)
+        {
+            return;
+        }
+
+        var context = clockAligned ? "Sample.Clock" : "Sample.Periodic";
         var powerWValue = powerKwValue * 1000.0;
         var offeredCurrent = GetConfiguredCurrentLimit() ?? MaxCurrentAmps;
         var offeredPowerWValue = offeredCurrent * NominalVoltage;
@@ -977,6 +1000,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
                     exportPowerWValue,
                     socValue,
                     _supportSoC,
+                    context,
                     out var sampledValue))
             {
                 sampledValues.Add(sampledValue);
@@ -1090,6 +1114,29 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             }
 
             SetLocalConfiguration(key, normalizedValue);
+
+            if (_activeTransactionId.HasValue)
+            {
+                RestartMeterValueLoops(cancellationToken);
+            }
+        }
+        else if (string.Equals(key, "MeterValuesAlignedData", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryNormalizeMeasurands(value, out normalizedValue))
+            {
+                await SendCallResultAsync(uniqueId, new Dictionary<string, object>
+                {
+                    ["status"] = "Rejected",
+                }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            SetLocalConfiguration(key, normalizedValue);
+
+            if (_activeTransactionId.HasValue)
+            {
+                RestartMeterValueLoops(cancellationToken);
+            }
         }
         else if (string.Equals(key, "MeterValueSampleInterval", StringComparison.OrdinalIgnoreCase))
         {
@@ -1107,7 +1154,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
             if (_activeTransactionId.HasValue)
             {
-                StartMeterValueLoop(cancellationToken);
+                RestartMeterValueLoops(cancellationToken);
             }
         }
         else if (string.Equals(key, "ClockAlignedDataInterval", StringComparison.OrdinalIgnoreCase))
@@ -1126,7 +1173,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
             if (_activeTransactionId.HasValue)
             {
-                StartClockAlignedMeterValueLoop(cancellationToken);
+                RestartMeterValueLoops(cancellationToken);
             }
         }
         else
@@ -1763,6 +1810,26 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
             .ToArray();
     }
 
+    private IReadOnlyList<string> GetMeterValuesAlignedData()
+    {
+        string? configured;
+        lock (_configuration)
+        {
+            _configuration.TryGetValue("MeterValuesAlignedData", out configured);
+        }
+
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return Array.Empty<string>();
+        }
+
+        return configured
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToArray();
+    }
+
     private static bool TryCreateSampledValue(
         string measurand,
         double energyWhValue,
@@ -1775,26 +1842,27 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
         double exportPowerWValue,
         double socValue,
         bool supportSoC,
+        string context,
         out Dictionary<string, object>? sampledValue)
     {
         sampledValue = measurand switch
         {
-            "Energy.Active.Import.Register" => CreateSampledValue(energyWhValue.ToString("0", CultureInfo.InvariantCulture), measurand, "Wh"),
-            "Energy.Active.Export.Register" => CreateSampledValue(exportEnergyWhValue.ToString("0", CultureInfo.InvariantCulture), measurand, "Wh"),
-            "Power.Active.Import" => CreateSampledValue(powerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W"),
-            "Power.Active.Export" => CreateSampledValue(exportPowerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W"),
-            "Power.Offered" => CreateSampledValue(offeredPowerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W"),
-            "Current.Offered" => CreateSampledValue(offeredCurrent.ToString("0.0", CultureInfo.InvariantCulture), measurand, "A"),
-            "Voltage" => CreateSampledValue(voltageValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "V"),
-            "Frequency" => CreateSampledValue(frequencyHzValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Hz"),
-            "SoC" when supportSoC => CreateSampledValue(socValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Percent"),
+            "Energy.Active.Import.Register" => CreateSampledValue(energyWhValue.ToString("0", CultureInfo.InvariantCulture), measurand, "Wh", context),
+            "Energy.Active.Export.Register" => CreateSampledValue(exportEnergyWhValue.ToString("0", CultureInfo.InvariantCulture), measurand, "Wh", context),
+            "Power.Active.Import" => CreateSampledValue(powerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W", context),
+            "Power.Active.Export" => CreateSampledValue(exportPowerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W", context),
+            "Power.Offered" => CreateSampledValue(offeredPowerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W", context),
+            "Current.Offered" => CreateSampledValue(offeredCurrent.ToString("0.0", CultureInfo.InvariantCulture), measurand, "A", context),
+            "Voltage" => CreateSampledValue(voltageValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "V", context),
+            "Frequency" => CreateSampledValue(frequencyHzValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Hz", context),
+            "SoC" when supportSoC => CreateSampledValue(socValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Percent", context),
             _ => null,
         };
 
         return sampledValue is not null;
     }
 
-    private static Dictionary<string, object> CreateSampledValue(string value, string measurand, string unit)
+    private static Dictionary<string, object> CreateSampledValue(string value, string measurand, string unit, string context)
     {
         return new Dictionary<string, object>
         {
@@ -1803,7 +1871,7 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
             ["unit"] = unit,
             ["format"] = "Raw",
             ["location"] = "Outlet",
-            ["context"] = "Sample.Periodic",
+            ["context"] = context,
         };
     }
 
