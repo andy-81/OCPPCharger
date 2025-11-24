@@ -1010,7 +1010,10 @@ public sealed class ChargerClient
                     context,
                     out var sampledValue))
             {
-                sampledValues.Add(sampledValue);
+                if (sampledValue is not null)
+                {
+                    sampledValues.Add(sampledValue);
+                }
             }
         }
 
