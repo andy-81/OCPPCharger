@@ -26,6 +26,9 @@ const configCancelButton = document.getElementById("config-cancel");
 const configMeterValuesSampledInput = document.getElementById("config-meter-values-sampled");
 const configMeterValueSampleIntervalInput = document.getElementById("config-meter-value-sample-interval");
 const configClockAlignedDataIntervalInput = document.getElementById("config-clock-aligned-data-interval");
+const preparingBtn = document.getElementById("btn-preparing");
+const startChargingBtn = document.getElementById("btn-start-charging");
+const stopChargingBtn = document.getElementById("btn-stop-charging");
 
 let logs = [];
 let configuration = {};
@@ -103,6 +106,8 @@ function updateVehicleStatus(state) {
   if (lowered !== "charging" && lowered !== "preparing") {
     clearMetricsDisplay();
   }
+
+  updateActionStates(baseState);
 }
 
 function formatNumber(value, digits = 1) {
@@ -223,6 +228,22 @@ function clearConfigurationValidation() {
   ].forEach((input) => {
     input?.classList.remove("input-error");
   });
+}
+
+function updateActionStates(state) {
+  const lowered = state ? state.trim().toLowerCase() : "";
+
+  if (preparingBtn) {
+    preparingBtn.disabled = lowered !== "available";
+  }
+
+  if (startChargingBtn) {
+    startChargingBtn.disabled = !(lowered === "available" || lowered === "preparing");
+  }
+
+  if (stopChargingBtn) {
+    stopChargingBtn.disabled = !(lowered === "charging" || lowered === "preparing" || lowered === "suspendedev");
+  }
 }
 
 function showConfigurationError(message, input) {
@@ -441,6 +462,39 @@ function setupControls(connection) {
         alert(error.message);
       }
     });
+  });
+
+  preparingBtn?.addEventListener("click", async () => {
+    try {
+      preparingBtn.disabled = true;
+      await postJson("/api/preparing", {});
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      updateActionStates(vehicleStatusEl.dataset.status ?? "");
+    }
+  });
+
+  startChargingBtn?.addEventListener("click", async () => {
+    try {
+      startChargingBtn.disabled = true;
+      await postJson("/api/start-charging", {});
+    } catch (error) {
+      alert(error.message ?? "Failed to start charging");
+    } finally {
+      updateActionStates(vehicleStatusEl.dataset.status ?? "");
+    }
+  });
+
+  stopChargingBtn?.addEventListener("click", async () => {
+    try {
+      stopChargingBtn.disabled = true;
+      await postJson("/api/stop-charging", {});
+    } catch (error) {
+      alert(error.message ?? "Failed to stop charging");
+    } finally {
+      updateActionStates(vehicleStatusEl.dataset.status ?? "");
+    }
   });
 
   clearLogsBtn?.addEventListener("click", () => {

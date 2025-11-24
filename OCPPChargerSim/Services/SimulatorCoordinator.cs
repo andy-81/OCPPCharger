@@ -82,6 +82,50 @@ public sealed class SimulatorCoordinator
         }
     }
 
+    public async Task EnterPreparingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = EnsureClient();
+            await client.EnterPreparingAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to enter Preparing state");
+            throw;
+        }
+    }
+
+    public async Task StartChargingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = EnsureClient();
+            await client.StartChargingFromUserAsync(cancellationToken).ConfigureAwait(false);
+            await client.StartManualSimulationAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to start charging");
+            throw;
+        }
+    }
+
+    public async Task StopChargingAsync(string reason, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = EnsureClient();
+            await client.StopChargingFromUserAsync(reason, cancellationToken).ConfigureAwait(false);
+            await client.StopManualSimulationAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to stop charging");
+            throw;
+        }
+    }
+
     public void SetLocalConfiguration(string key, string value)
     {
         try

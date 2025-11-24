@@ -71,6 +71,45 @@ app.MapPost("/api/status", async (StatusRequest request, SimulatorCoordinator co
     }
 });
 
+app.MapPost("/api/preparing", async (SimulatorCoordinator coordinator, HttpContext context) =>
+{
+    try
+    {
+        await coordinator.EnterPreparingAsync(context.RequestAborted).ConfigureAwait(false);
+        return Results.Accepted();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/start-charging", async (SimulatorCoordinator coordinator, HttpContext context) =>
+{
+    try
+    {
+        await coordinator.StartChargingAsync(context.RequestAborted).ConfigureAwait(false);
+        return Results.Accepted();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/stop-charging", async (SimulatorCoordinator coordinator, HttpContext context) =>
+{
+    try
+    {
+        await coordinator.StopChargingAsync("Local", context.RequestAborted).ConfigureAwait(false);
+        return Results.Accepted();
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.MapPost("/api/configuration", (ConfigurationRequest request, SimulatorCoordinator coordinator) =>
 {
     try
