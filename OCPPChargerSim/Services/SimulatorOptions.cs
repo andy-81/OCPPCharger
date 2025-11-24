@@ -4,7 +4,7 @@ public sealed class SimulatorOptions
 {
     public const string DefaultMeterValuesSampledData = "Energy.Active.Import.Register,Power.Active.Import";
     public const int DefaultMeterValueSampleInterval = 15;
-    public const int DefaultClockAlignedDataInterval = 0;
+    public const int DefaultClockAlignedDataInterval = 60;
 
     public string? Url { get; set; }
 

@@ -192,7 +192,7 @@ public sealed class SimulatorConfigurationProvider
         var sampleInterval = options.MeterValueSampleInterval <= 0
             ? SimulatorOptions.DefaultMeterValueSampleInterval
             : options.MeterValueSampleInterval;
-        var clockAlignedInterval = options.ClockAlignedDataInterval < 0
+        var clockAlignedInterval = options.ClockAlignedDataInterval <= 0
             ? SimulatorOptions.DefaultClockAlignedDataInterval
             : options.ClockAlignedDataInterval;
 
