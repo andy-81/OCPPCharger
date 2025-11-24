@@ -140,6 +140,9 @@ public sealed class SimulatorConfigurationProvider
             ["ChargerId"] = normalized.ChargerId,
             ["ChargePointSerialNumber"] = normalized.ChargePointSerialNumber,
             ["ChargeBoxSerialNumber"] = normalized.ChargeBoxSerialNumber,
+            ["MeterValuesSampledData"] = normalized.MeterValuesSampledData,
+            ["MeterValueSampleInterval"] = normalized.MeterValueSampleInterval,
+            ["ClockAlignedDataInterval"] = normalized.ClockAlignedDataInterval,
         };
 
         var json = JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -183,6 +186,15 @@ public sealed class SimulatorConfigurationProvider
 
         var chargePointSerial = string.IsNullOrWhiteSpace(options.ChargePointSerialNumber) ? "0" : options.ChargePointSerialNumber.Trim();
         var chargeBoxSerial = string.IsNullOrWhiteSpace(options.ChargeBoxSerialNumber) ? "0" : options.ChargeBoxSerialNumber.Trim();
+        var sampledData = string.IsNullOrWhiteSpace(options.MeterValuesSampledData)
+            ? SimulatorOptions.DefaultMeterValuesSampledData
+            : options.MeterValuesSampledData.Trim();
+        var sampleInterval = options.MeterValueSampleInterval <= 0
+            ? SimulatorOptions.DefaultMeterValueSampleInterval
+            : options.MeterValueSampleInterval;
+        var clockAlignedInterval = options.ClockAlignedDataInterval < 0
+            ? SimulatorOptions.DefaultClockAlignedDataInterval
+            : options.ClockAlignedDataInterval;
 
         return new SimulatorOptions
         {
@@ -195,6 +207,9 @@ public sealed class SimulatorConfigurationProvider
             ChargerId = chargerId,
             ChargePointSerialNumber = chargePointSerial,
             ChargeBoxSerialNumber = chargeBoxSerial,
+            MeterValuesSampledData = sampledData,
+            MeterValueSampleInterval = sampleInterval,
+            ClockAlignedDataInterval = clockAlignedInterval,
         };
     }
 
@@ -219,6 +234,9 @@ public sealed class SimulatorConfigurationProvider
             ChargerId = options.ChargerId,
             ChargePointSerialNumber = options.ChargePointSerialNumber,
             ChargeBoxSerialNumber = options.ChargeBoxSerialNumber,
+            MeterValuesSampledData = options.MeterValuesSampledData,
+            MeterValueSampleInterval = options.MeterValueSampleInterval,
+            ClockAlignedDataInterval = options.ClockAlignedDataInterval,
         };
     }
 

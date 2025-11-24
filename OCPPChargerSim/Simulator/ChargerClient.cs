@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using OcppWeb.Services;
 
 namespace OcppSimulator;
 
@@ -20,10 +21,10 @@ public sealed class ChargerClient
 
     private static readonly IReadOnlyDictionary<string, string> DefaultConfiguration = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["MeterValueSampleInterval"] = "15",
-        ["MeterValuesSampledData"] = "Energy.Active.Import.Register,Power.Active.Import",
+        ["MeterValueSampleInterval"] = SimulatorOptions.DefaultMeterValueSampleInterval.ToString(CultureInfo.InvariantCulture),
+        ["MeterValuesSampledData"] = SimulatorOptions.DefaultMeterValuesSampledData,
         ["MeterValuesAlignedData"] = "",
-        ["ClockAlignedDataInterval"] = "0",
+        ["ClockAlignedDataInterval"] = SimulatorOptions.DefaultClockAlignedDataInterval.ToString(CultureInfo.InvariantCulture),
         ["minSoC"] = "20",
         ["maxSoC"] = "100",
         ["chargingALimitConn1"] = "32",
