@@ -140,6 +140,8 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
     var sample = state.LatestSample;
     var (url, identity, authKey) = state.GetConnectionDetails();
     var (requiresConfiguration, configFileMissing) = state.ConfigurationStatus;
+    var snapshot = configProvider.Snapshot;
+    var meterValues = snapshot.Options;
     var (chargePointSerial, chargeBoxSerial) = state.GetSerialNumbers();
     return Results.Ok(new
     {
@@ -154,6 +156,7 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
             stateOfCharge = sample.StateOfCharge >= 0 ? sample.StateOfCharge : (double?)null,
             timestamp = sample.Timestamp,
         },
+        bootConfiguration = state.GetBootConfiguration(),
         connection = new { url, identity, authKey },
         loggingEnabled = state.LoggingEnabled,
         requiresConfiguration,
@@ -168,6 +171,12 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
         }),
         selectedCharger = state.SelectedChargerId,
         serialNumbers = new { chargePointSerial, chargeBoxSerial },
+        meterValuesConfiguration = new
+        {
+            sampledData = meterValues.MeterValuesSampledData,
+            sampleInterval = meterValues.MeterValueSampleInterval,
+            clockAlignedDataInterval = meterValues.ClockAlignedDataInterval,
+        },
     });
 });
 

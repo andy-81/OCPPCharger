@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -129,6 +130,10 @@ public sealed class SimulatorHostedService : BackgroundService
             _storageOptions.DataDirectory,
             supportSoC: options.SupportSoC,
             enableHeartbeat: options.SupportHeartbeat);
+
+        client.SetLocalConfiguration("MeterValuesSampledData", options.MeterValuesSampledData);
+        client.SetLocalConfiguration("MeterValueSampleInterval", options.MeterValueSampleInterval.ToString(CultureInfo.InvariantCulture));
+        client.SetLocalConfiguration("ClockAlignedDataInterval", options.ClockAlignedDataInterval.ToString(CultureInfo.InvariantCulture));
 
         _coordinator.Attach(client, logger);
         _state.SetVehicleState(client.VehicleState);
