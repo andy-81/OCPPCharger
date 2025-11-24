@@ -112,6 +112,20 @@
             <span>Charge Box Serial Number</span>
             <input type="text" id="config-cb-serial" required />
           </label>
+          <label>
+            <span>Meter Values Sampled Data (CSV)</span>
+            <input type="text" id="config-meter-values-sampled" />
+          </label>
+          <div class="split-row">
+            <label>
+              <span>Meter Value Sample Interval (s)</span>
+              <input type="number" id="config-meter-value-sample-interval" min="1" required />
+            </label>
+            <label>
+              <span>Clock Aligned Data Interval (s)</span>
+              <input type="number" id="config-clock-aligned-data-interval" min="1" required />
+            </label>
+          </div>
           <div id="config-error" class="form-error" role="alert"></div>
           <div class="modal-actions">
             <button type="button" id="config-cancel" class="secondary-button">Cancel</button>

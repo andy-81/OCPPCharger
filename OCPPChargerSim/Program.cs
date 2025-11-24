@@ -173,9 +173,9 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
         serialNumbers = new { chargePointSerial, chargeBoxSerial },
         meterValuesConfiguration = new
         {
-            sampledData = meterValues.MeterValuesSampledData,
-            sampleInterval = meterValues.MeterValueSampleInterval,
-            clockAlignedDataInterval = meterValues.ClockAlignedDataInterval,
+            meter_values_sampled_data = meterValues.MeterValuesSampledData,
+            meter_value_sample_interval = meterValues.MeterValueSampleInterval,
+            clock_aligned_data_interval = meterValues.ClockAlignedDataInterval,
         },
     });
 });
@@ -192,6 +192,16 @@ app.MapPost("/api/bootstrap", async (BootstrapRequest request, SimulatorConfigur
         return Results.BadRequest(new { error = "Please select a valid charger type." });
     }
 
+    if (request.MeterValueSampleInterval.HasValue && request.MeterValueSampleInterval <= 0)
+    {
+        return Results.BadRequest(new { error = "Meter Value Sample Interval must be greater than zero." });
+    }
+
+    if (request.ClockAlignedDataInterval.HasValue && request.ClockAlignedDataInterval <= 0)
+    {
+        return Results.BadRequest(new { error = "Clock Aligned Data Interval must be greater than zero." });
+    }
+
     var cpSerial = string.IsNullOrWhiteSpace(request.ChargePointSerialNumber) ? "0" : request.ChargePointSerialNumber.Trim();
     var cbSerial = string.IsNullOrWhiteSpace(request.ChargeBoxSerialNumber) ? "0" : request.ChargeBoxSerialNumber.Trim();
 
@@ -203,6 +213,11 @@ app.MapPost("/api/bootstrap", async (BootstrapRequest request, SimulatorConfigur
         ChargerId = request.ChargerId,
         ChargePointSerialNumber = cpSerial,
         ChargeBoxSerialNumber = cbSerial,
+        MeterValuesSampledData = string.IsNullOrWhiteSpace(request.MeterValuesSampledData)
+            ? SimulatorOptions.DefaultMeterValuesSampledData
+            : request.MeterValuesSampledData.Trim(),
+        MeterValueSampleInterval = request.MeterValueSampleInterval ?? SimulatorOptions.DefaultMeterValueSampleInterval,
+        ClockAlignedDataInterval = request.ClockAlignedDataInterval ?? SimulatorOptions.DefaultClockAlignedDataInterval,
     }, cancellationToken).ConfigureAwait(false);
 
     state.SetConfigurationRequirement(snapshot.RequiresConfiguration, snapshot.ConfigurationFileMissing);
@@ -236,4 +251,13 @@ record ConfigurationRequest(string Key, string Value);
 
 record LoggingRequest(bool Enabled);
 
-record BootstrapRequest(string Url, string Identity, string AuthKey, string ChargerId, string ChargePointSerialNumber, string ChargeBoxSerialNumber);
+record BootstrapRequest(
+    string Url,
+    string Identity,
+    string AuthKey,
+    string ChargerId,
+    string ChargePointSerialNumber,
+    string ChargeBoxSerialNumber,
+    string? MeterValuesSampledData,
+    int? MeterValueSampleInterval,
+    int? ClockAlignedDataInterval);
