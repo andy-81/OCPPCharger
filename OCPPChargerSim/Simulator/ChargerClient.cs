@@ -953,12 +953,34 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         _meterValue = (int)Math.Round(_meterAccumulatorWh);
         var energyWhValue = Math.Round(_meterAccumulatorWh, 0, MidpointRounding.AwayFromZero);
         var socValue = FixedStateOfCharge;
-        var energy = energyWhValue.ToString(CultureInfo.InvariantCulture);
-        var power = powerKwValue.ToString("0.0", CultureInfo.InvariantCulture);
-        string? soc = null;
-        if (_supportSoC)
+        var sampledData = GetMeterValuesSampledData();
+        var powerWValue = powerKwValue * 1000.0;
+        var offeredCurrent = GetConfiguredCurrentLimit() ?? MaxCurrentAmps;
+        var offeredPowerWValue = offeredCurrent * NominalVoltage;
+        var frequencyHzValue = 50.0;
+        var voltageValue = NominalVoltage;
+        var exportEnergyWhValue = 0.0;
+        var exportPowerWValue = 0.0;
+
+        var sampledValues = new List<Dictionary<string, object>>();
+        foreach (var measurand in sampledData)
         {
-            soc = socValue.ToString("0.0", CultureInfo.InvariantCulture);
+            if (TryCreateSampledValue(
+                    measurand,
+                    energyWhValue,
+                    powerWValue,
+                    offeredPowerWValue,
+                    offeredCurrent,
+                    voltageValue,
+                    frequencyHzValue,
+                    exportEnergyWhValue,
+                    exportPowerWValue,
+                    socValue,
+                    _supportSoC,
+                    out var sampledValue))
+            {
+                sampledValues.Add(sampledValue);
+            }
         }
 
         var payload = new Dictionary<string, object>
@@ -969,48 +991,11 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             {
                 new Dictionary<string, object>
                 {
-                    ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
-                    ["sampledValue"] = new object[]
-                    {
-                        new Dictionary<string, object>
-                        {
-                            ["value"] = energy,
-                            ["measurand"] = "Energy.Active.Import.Register",
-                            ["unit"] = "Wh",
-                            ["context"] = "Sample.Periodic",
-                        },
-                        new Dictionary<string, object>
-                        {
-                            ["value"] = power,
-                            ["measurand"] = "Power.Active.Import",
-                            ["unit"] = "kW",
-                            ["context"] = "Sample.Periodic",
-                        },
-                    },
+                    ["timestamp"] = now.ToUniversalTime().ToString("O"),
+                    ["sampledValue"] = sampledValues.ToArray(),
                 },
             },
         };
-
-        if (_supportSoC &&
-            payload.TryGetValue("meterValue", out var meterValueObj) &&
-            meterValueObj is object[] meterArray &&
-            meterArray.Length > 0 &&
-            meterArray[0] is Dictionary<string, object> meterEntryCandidate &&
-            meterEntryCandidate.TryGetValue("sampledValue", out var sampledObj) &&
-            sampledObj is object[] sampledValues)
-        {
-            var meterEntry = meterEntryCandidate;
-            var extended = new object[sampledValues.Length + 1];
-            Array.Copy(sampledValues, extended, sampledValues.Length);
-            extended[^1] = new Dictionary<string, object>
-            {
-                ["value"] = soc!,
-                ["measurand"] = "SoC",
-                ["unit"] = "Percent",
-                ["context"] = "Sample.Periodic",
-            };
-            meterEntry["sampledValue"] = extended;
-        }
 
         await SendCallAsync(uniqueId, "MeterValues", payload, cancellationToken).ConfigureAwait(false);
 
@@ -1756,6 +1741,70 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
         }
 
         return TimeSpan.Zero;
+    }
+
+    private IReadOnlyList<string> GetMeterValuesSampledData()
+    {
+        string? configured;
+        lock (_configuration)
+        {
+            _configuration.TryGetValue("MeterValuesSampledData", out configured);
+        }
+
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            configured = SimulatorOptions.DefaultMeterValuesSampledData;
+        }
+
+        return configured
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToArray();
+    }
+
+    private static bool TryCreateSampledValue(
+        string measurand,
+        double energyWhValue,
+        double powerWValue,
+        double offeredPowerWValue,
+        double offeredCurrent,
+        double voltageValue,
+        double frequencyHzValue,
+        double exportEnergyWhValue,
+        double exportPowerWValue,
+        double socValue,
+        bool supportSoC,
+        out Dictionary<string, object>? sampledValue)
+    {
+        sampledValue = measurand switch
+        {
+            "Energy.Active.Import.Register" => CreateSampledValue(energyWhValue.ToString("0", CultureInfo.InvariantCulture), measurand, "Wh"),
+            "Energy.Active.Export.Register" => CreateSampledValue(exportEnergyWhValue.ToString("0", CultureInfo.InvariantCulture), measurand, "Wh"),
+            "Power.Active.Import" => CreateSampledValue(powerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W"),
+            "Power.Active.Export" => CreateSampledValue(exportPowerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W"),
+            "Power.Offered" => CreateSampledValue(offeredPowerWValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "W"),
+            "Current.Offered" => CreateSampledValue(offeredCurrent.ToString("0.0", CultureInfo.InvariantCulture), measurand, "A"),
+            "Voltage" => CreateSampledValue(voltageValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "V"),
+            "Frequency" => CreateSampledValue(frequencyHzValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Hz"),
+            "SoC" when supportSoC => CreateSampledValue(socValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Percent"),
+            _ => null,
+        };
+
+        return sampledValue is not null;
+    }
+
+    private static Dictionary<string, object> CreateSampledValue(string value, string measurand, string unit)
+    {
+        return new Dictionary<string, object>
+        {
+            ["value"] = value,
+            ["measurand"] = measurand,
+            ["unit"] = unit,
+            ["format"] = "Raw",
+            ["location"] = "Outlet",
+            ["context"] = "Sample.Periodic",
+        };
     }
 
     private static bool TryNormalizeMeasurands(string value, out string normalized)
