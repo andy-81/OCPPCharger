@@ -30,6 +30,8 @@ public sealed class DualLogger : IDisposable
 
     public void Info(string message) => Write(message);
 
+    public void Warn(string message) => Write(message);
+
     public void Error(string message) => Write(message);
 
     public void Error(Exception exception, string message) => Write($"{message} {exception}");

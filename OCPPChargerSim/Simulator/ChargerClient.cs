@@ -614,7 +614,7 @@ public sealed class ChargerClient
             ["status"] = "Accepted",
         }, cancellationToken).ConfigureAwait(false);
 
-        await StartChargingSequenceAsync(idTag, payload, StateInitiator.Remote, cancellationToken, enterPreparing: false).ConfigureAwait(false);
+        await StartChargingSequenceAsync(idTag, payload, StateInitiator.Remote, cancellationToken, enterPreparing: true).ConfigureAwait(false);
     }
 
     private async Task EnterPreparingStateAsync(StateInitiator initiator, CancellationToken cancellationToken)
@@ -638,14 +638,9 @@ public sealed class ChargerClient
             await EnterPreparingStateAsync(initiator, cancellationToken).ConfigureAwait(false);
         }
 
-        var started = _activeTransactionId.HasValue || await SendStartTransactionAsync(idTag, payload, cancellationToken).ConfigureAwait(false);
-        if (!started)
-        {
-            TransitionVehicleState("SuspendedEV", initiator);
-            _activeIdTag = null;
-            await SendStatusNotificationAsync("SuspendedEV", cancellationToken, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            return;
-        }
+        var startTransactionTask = _activeTransactionId.HasValue
+            ? Task.FromResult(true)
+            : SendStartTransactionAsync(idTag, payload, cancellationToken);
 
         TransitionVehicleState("Charging", initiator);
         _logger.Info($"Vehicle state updated to: {_vehicle.State}");
@@ -656,6 +651,12 @@ public sealed class ChargerClient
 
         StartMeterValueLoop(cancellationToken);
         StartClockAlignedMeterValueLoop(cancellationToken);
+
+        var started = await startTransactionTask.ConfigureAwait(false);
+        if (!started)
+        {
+            _logger.Warn("StartTransaction failed or timed out; continuing session in Charging state.");
+        }
     }
 
     private async Task<bool> SendStartTransactionAsync(string idTag, JsonElement payload, CancellationToken cancellationToken)
@@ -720,11 +721,6 @@ public sealed class ChargerClient
     {
         StopMeterValueLoop();
 
-        if (!_activeTransactionId.HasValue)
-        {
-            return;
-        }
-
         var interval = GetMeterSampleInterval();
         if (interval <= TimeSpan.Zero)
         {
@@ -739,12 +735,17 @@ public sealed class ChargerClient
         {
             try
             {
-                while (!loopToken.IsCancellationRequested && _activeTransactionId.HasValue)
+                while (!loopToken.IsCancellationRequested)
                 {
                     await Task.Delay(interval, loopToken).ConfigureAwait(false);
-                    if (loopToken.IsCancellationRequested || !_activeTransactionId.HasValue)
+                    if (loopToken.IsCancellationRequested)
                     {
                         break;
+                    }
+
+                    if (!_activeTransactionId.HasValue)
+                    {
+                        continue;
                     }
 
                     await SendMeterValuesAsync(loopToken).ConfigureAwait(false);
@@ -787,11 +788,6 @@ public sealed class ChargerClient
     {
         StopClockAlignedMeterValueLoop();
 
-        if (!_activeTransactionId.HasValue)
-        {
-            return;
-        }
-
         var interval = GetClockAlignedInterval();
         if (interval <= TimeSpan.Zero)
         {
@@ -806,13 +802,18 @@ public sealed class ChargerClient
         {
             try
             {
-                while (!loopToken.IsCancellationRequested && _activeTransactionId.HasValue)
+                while (!loopToken.IsCancellationRequested)
                 {
                     var delay = GetDelayUntilNextAlignment(interval);
                     await Task.Delay(delay, loopToken).ConfigureAwait(false);
-                    if (loopToken.IsCancellationRequested || !_activeTransactionId.HasValue)
+                    if (loopToken.IsCancellationRequested)
                     {
                         break;
+                    }
+
+                    if (!_activeTransactionId.HasValue)
+                    {
+                        continue;
                     }
 
                     await SendMeterValuesAsync(loopToken, clockAligned: true).ConfigureAwait(false);
@@ -1009,7 +1010,10 @@ public sealed class ChargerClient
                     context,
                     out var sampledValue))
             {
-                sampledValues.Add(sampledValue);
+                if (sampledValue is not null)
+                {
+                    sampledValues.Add(sampledValue);
+                }
             }
         }
 
