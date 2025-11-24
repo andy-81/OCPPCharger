@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -69,6 +70,7 @@ public sealed class ChargerClient
     private CancellationTokenSource? _meterLoopCts;
     private CancellationTokenSource? _manualSimulationCts;
     private CancellationTokenSource? _heartbeatLoopCts;
+    private CancellationTokenSource? _clockAlignedLoopCts;
     private readonly object _manualLock = new();
     private bool _manualSimulationActive;
     private readonly bool _supportSoC;
@@ -442,6 +444,7 @@ public sealed class ChargerClient
                     if (_activeTransactionId.HasValue)
                     {
                         StartMeterValueLoop(cancellationToken);
+                        StartClockAlignedMeterValueLoop(cancellationToken);
                         await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
                     }
                 }
@@ -645,6 +648,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
     await SendStatusNotificationAsync("Charging", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
 
     StartMeterValueLoop(cancellationToken);
+    StartClockAlignedMeterValueLoop(cancellationToken);
     await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
 }
 
@@ -752,6 +756,8 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
     private void StopMeterValueLoop()
     {
+        StopClockAlignedMeterValueLoop();
+
         if (_meterLoopCts is null)
         {
             return;
@@ -768,6 +774,72 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         {
             _meterLoopCts.Dispose();
             _meterLoopCts = null;
+        }
+    }
+
+    private void StartClockAlignedMeterValueLoop(CancellationToken parentToken)
+    {
+        StopClockAlignedMeterValueLoop();
+
+        if (!_activeTransactionId.HasValue)
+        {
+            return;
+        }
+
+        var interval = GetClockAlignedInterval();
+        if (interval <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        var linked = CancellationTokenSource.CreateLinkedTokenSource(parentToken);
+        _clockAlignedLoopCts = linked;
+        var loopToken = linked.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!loopToken.IsCancellationRequested && _activeTransactionId.HasValue)
+                {
+                    var delay = GetDelayUntilNextAlignment(interval);
+                    await Task.Delay(delay, loopToken).ConfigureAwait(false);
+                    if (loopToken.IsCancellationRequested || !_activeTransactionId.HasValue)
+                    {
+                        break;
+                    }
+
+                    await SendMeterValuesAsync(loopToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (loopToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Clock-aligned MeterValues loop failed");
+            }
+        }, CancellationToken.None);
+    }
+
+    private void StopClockAlignedMeterValueLoop()
+    {
+        if (_clockAlignedLoopCts is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _clockAlignedLoopCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            _clockAlignedLoopCts.Dispose();
+            _clockAlignedLoopCts = null;
         }
     }
 
@@ -1019,18 +1091,70 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         }
 
         var value = TryGetString(payload, "value", out var provided) ? provided : string.Empty;
-        _configuration[key] = value;
-        _logger.Info($"Configuration updated: {key}={value}");
+        var normalizedValue = value;
 
-        if (_activeTransactionId.HasValue && string.Equals(key, "MeterValueSampleInterval", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(key, "MeterValuesSampledData", StringComparison.OrdinalIgnoreCase))
         {
-            StartMeterValueLoop(cancellationToken);
+            if (!TryNormalizeMeasurands(value, out normalizedValue))
+            {
+                await SendCallResultAsync(uniqueId, new Dictionary<string, object>
+                {
+                    ["status"] = "Rejected",
+                }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            SetLocalConfiguration(key, normalizedValue);
+        }
+        else if (string.Equals(key, "MeterValueSampleInterval", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intervalSeconds) || intervalSeconds <= 0)
+            {
+                await SendCallResultAsync(uniqueId, new Dictionary<string, object>
+                {
+                    ["status"] = "Rejected",
+                }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            normalizedValue = intervalSeconds.ToString(CultureInfo.InvariantCulture);
+            SetLocalConfiguration(key, normalizedValue);
+
+            if (_activeTransactionId.HasValue)
+            {
+                StartMeterValueLoop(cancellationToken);
+            }
+        }
+        else if (string.Equals(key, "ClockAlignedDataInterval", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intervalSeconds) || intervalSeconds <= 0)
+            {
+                await SendCallResultAsync(uniqueId, new Dictionary<string, object>
+                {
+                    ["status"] = "Rejected",
+                }, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            normalizedValue = intervalSeconds.ToString(CultureInfo.InvariantCulture);
+            SetLocalConfiguration(key, normalizedValue);
+
+            if (_activeTransactionId.HasValue)
+            {
+                StartClockAlignedMeterValueLoop(cancellationToken);
+            }
+        }
+        else
+        {
+            SetLocalConfiguration(key, value);
+
+            if (_heartbeatEnabled && string.Equals(key, "HeartbeatInterval", StringComparison.OrdinalIgnoreCase))
+            {
+                StartHeartbeatLoop(cancellationToken);
+            }
         }
 
-        if (_heartbeatEnabled && string.Equals(key, "HeartbeatInterval", StringComparison.OrdinalIgnoreCase))
-        {
-            StartHeartbeatLoop(cancellationToken);
-        }
+        _logger.Info($"Configuration updated: {key}={normalizedValue}");
 
         await SendCallResultAsync(uniqueId, new Dictionary<string, object>
         {
@@ -1616,6 +1740,50 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
         }
 
         return TimeSpan.FromSeconds(15);
+    }
+
+    private TimeSpan GetClockAlignedInterval()
+    {
+        string? configured;
+        lock (_configuration)
+        {
+            _configuration.TryGetValue("ClockAlignedDataInterval", out configured);
+        }
+
+        if (configured is not null && int.TryParse(configured, out var seconds) && seconds > 0)
+        {
+            return TimeSpan.FromSeconds(seconds);
+        }
+
+        return TimeSpan.Zero;
+    }
+
+    private static bool TryNormalizeMeasurands(string value, out string normalized)
+    {
+        var parts = value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToArray();
+
+        if (parts.Length == 0)
+        {
+            normalized = string.Empty;
+            return false;
+        }
+
+        normalized = string.Join(",", parts);
+        return true;
+    }
+
+    private static TimeSpan GetDelayUntilNextAlignment(TimeSpan interval)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var ticks = interval.Ticks;
+        var alignedTicks = ((now.Ticks / ticks) + 1) * ticks;
+        var delayTicks = alignedTicks - now.Ticks;
+
+        return delayTicks > 0 ? TimeSpan.FromTicks(delayTicks) : interval;
     }
 
     private TimeSpan GetHeartbeatInterval()
