@@ -614,7 +614,7 @@ public sealed class ChargerClient
             ["status"] = "Accepted",
         }, cancellationToken).ConfigureAwait(false);
 
-        await StartChargingSequenceAsync(idTag, payload, StateInitiator.Remote, cancellationToken).ConfigureAwait(false);
+        await StartChargingSequenceAsync(idTag, payload, StateInitiator.Remote, cancellationToken, enterPreparing: false).ConfigureAwait(false);
     }
 
     private async Task EnterPreparingStateAsync(StateInitiator initiator, CancellationToken cancellationToken)
@@ -629,11 +629,14 @@ public sealed class ChargerClient
         await SendStatusNotificationAsync("Preparing", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
     }
 
-    private async Task StartChargingSequenceAsync(string idTag, JsonElement payload, StateInitiator initiator, CancellationToken cancellationToken)
+    private async Task StartChargingSequenceAsync(string idTag, JsonElement payload, StateInitiator initiator, CancellationToken cancellationToken, bool enterPreparing = true)
     {
         _activeIdTag = idTag;
 
-        await EnterPreparingStateAsync(initiator, cancellationToken).ConfigureAwait(false);
+        if (enterPreparing)
+        {
+            await EnterPreparingStateAsync(initiator, cancellationToken).ConfigureAwait(false);
+        }
 
         var started = _activeTransactionId.HasValue || await SendStartTransactionAsync(idTag, payload, cancellationToken).ConfigureAwait(false);
         if (!started)
