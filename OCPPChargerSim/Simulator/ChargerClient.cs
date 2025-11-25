@@ -1409,8 +1409,8 @@ public sealed class ChargerClient
         {
         }
 
-        TransitionVehicleState("Available", initiator);
-        await SendStatusNotificationAsync("Available", cancellationToken).ConfigureAwait(false);
+        TransitionVehicleState("SuspendedEV", initiator);
+        await SendStatusNotificationAsync("SuspendedEV", cancellationToken).ConfigureAwait(false);
 
         if (!_activeTransactionId.HasValue)
         {
