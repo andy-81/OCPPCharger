@@ -656,16 +656,17 @@ public sealed class ChargerClient
 
         await SendStatusNotificationAsync("Charging", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
 
+        var started = await startTransactionTask.ConfigureAwait(false);
+        if (!started || !GetCurrentTransactionId().HasValue)
+        {
+            _logger.Warn("StartTransaction failed or timed out; skipping initial MeterValues dispatch.");
+            return;
+        }
+
         await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
 
         StartMeterValueLoop(cancellationToken);
         StartClockAlignedMeterValueLoop(cancellationToken);
-
-        var started = await startTransactionTask.ConfigureAwait(false);
-        if (!started)
-        {
-            _logger.Warn("StartTransaction failed or timed out; continuing session in Charging state.");
-        }
     }
 
     private async Task<bool> SendStartTransactionAsync(string idTag, JsonElement payload, CancellationToken cancellationToken)
