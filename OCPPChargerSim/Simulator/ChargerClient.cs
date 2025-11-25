@@ -64,6 +64,7 @@ public sealed class ChargerClient
     private readonly Random _random = new();
     private string? _activeIdTag;
     private int? _activeTransactionId;
+    private int? _provisionalTransactionId;
     private int _meterStartValue;
     private int _meterValue;
     private double _meterAccumulatorWh;
@@ -146,7 +147,7 @@ public sealed class ChargerClient
         if (string.Equals(status, "Charging", StringComparison.OrdinalIgnoreCase))
         {
             var idTag = _activeIdTag ?? GetFallbackIdTag();
-            if (!_activeTransactionId.HasValue)
+            if (!GetCurrentTransactionId().HasValue)
             {
                 return StartChargingSequenceAsync(idTag, default, StateInitiator.User, cancellationToken);
             }
@@ -191,7 +192,7 @@ public sealed class ChargerClient
 
         lock (_manualLock)
         {
-            if (_manualSimulationCts is not null || _activeTransactionId.HasValue)
+            if (_manualSimulationCts is not null || GetCurrentTransactionId().HasValue)
             {
                 return Task.CompletedTask;
             }
@@ -448,7 +449,7 @@ public sealed class ChargerClient
                     await SendStatusNotificationAsync(reportedState, cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
                     await SendBootMeterValuesAsync(cancellationToken).ConfigureAwait(false);
 
-                    if (_activeTransactionId.HasValue)
+                    if (GetCurrentTransactionId().HasValue)
                     {
                         StartMeterValueLoop(cancellationToken);
                         StartClockAlignedMeterValueLoop(cancellationToken);
@@ -589,7 +590,7 @@ public sealed class ChargerClient
             ? providedIdTag
             : GetFallbackIdTag();
 
-        if (_activeTransactionId.HasValue)
+        if (GetCurrentTransactionId().HasValue)
         {
             _logger.Info("RemoteStartTransaction acknowledged: transaction already active.");
             await SendCallResultAsync(uniqueId, new Dictionary<string, object>
@@ -635,6 +636,11 @@ public sealed class ChargerClient
     private async Task StartChargingSequenceAsync(string idTag, JsonElement payload, StateInitiator initiator, CancellationToken cancellationToken, bool enterPreparing = true)
     {
         _activeIdTag = idTag;
+
+        if (!_activeTransactionId.HasValue)
+        {
+            EnsureProvisionalTransactionId();
+        }
 
         if (enterPreparing)
         {
@@ -731,6 +737,11 @@ public sealed class ChargerClient
             }
 
             _activeTransactionId = transactionId;
+            if (_provisionalTransactionId.HasValue && _provisionalTransactionId.Value != transactionId)
+            {
+                _logger.Info($"Replacing provisional transaction {_provisionalTransactionId.Value} with confirmed transaction {transactionId}.");
+            }
+            _provisionalTransactionId = null;
             _logger.Info($"StartTransaction confirmation received for idTag {pendingStart.IdTag} with transaction {transactionId} (status: {status}).");
 
             if (string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase))
@@ -746,6 +757,19 @@ public sealed class ChargerClient
         {
             _pendingStartTransactions.TryRemove(uniqueId, out _);
         }
+    }
+
+    private int? GetCurrentTransactionId()
+        => _activeTransactionId ?? _provisionalTransactionId;
+
+    private int EnsureProvisionalTransactionId()
+    {
+        if (!_provisionalTransactionId.HasValue)
+        {
+            _provisionalTransactionId = -Math.Abs(_random.Next(1, int.MaxValue));
+        }
+
+        return _provisionalTransactionId.Value;
     }
 
     private void StartMeterValueLoop(CancellationToken parentToken)
@@ -774,7 +798,7 @@ public sealed class ChargerClient
                         break;
                     }
 
-                    if (!_activeTransactionId.HasValue)
+                    if (!GetCurrentTransactionId().HasValue)
                     {
                         continue;
                     }
@@ -842,7 +866,7 @@ public sealed class ChargerClient
                         break;
                     }
 
-                    if (!_activeTransactionId.HasValue)
+                    if (!GetCurrentTransactionId().HasValue)
                     {
                         continue;
                     }
@@ -883,7 +907,7 @@ public sealed class ChargerClient
 
     private void RestartMeterValueLoops(CancellationToken parentToken)
     {
-        if (!_activeTransactionId.HasValue)
+        if (!GetCurrentTransactionId().HasValue)
         {
             return;
         }
@@ -960,7 +984,8 @@ public sealed class ChargerClient
 
     private async Task SendMeterValuesAsync(CancellationToken cancellationToken, bool clockAligned = false)
     {
-        if (!_activeTransactionId.HasValue)
+        var transactionId = GetCurrentTransactionId();
+        if (!transactionId.HasValue)
         {
             return;
         }
@@ -1051,7 +1076,7 @@ public sealed class ChargerClient
         var payload = new Dictionary<string, object>
         {
             ["connectorId"] = _connectorId,
-            ["transactionId"] = _activeTransactionId.Value,
+            ["transactionId"] = transactionId.Value,
             ["meterValue"] = new object[]
             {
                 new Dictionary<string, object>
@@ -1156,7 +1181,7 @@ public sealed class ChargerClient
 
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1174,7 +1199,7 @@ public sealed class ChargerClient
 
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1193,7 +1218,7 @@ public sealed class ChargerClient
             normalizedValue = intervalSeconds.ToString(CultureInfo.InvariantCulture);
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1212,7 +1237,7 @@ public sealed class ChargerClient
             normalizedValue = intervalSeconds.ToString(CultureInfo.InvariantCulture);
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1309,7 +1334,7 @@ public sealed class ChargerClient
 
     private async Task HandleRemoteStopTransactionAsync(string uniqueId, JsonElement payload, CancellationToken cancellationToken)
     {
-        if (!_activeTransactionId.HasValue)
+        if (!GetCurrentTransactionId().HasValue)
         {
             if (_manualSimulationActive)
             {
@@ -1334,13 +1359,13 @@ public sealed class ChargerClient
             return;
         }
 
-        var requestedId = _activeTransactionId.Value;
+        var requestedId = _activeTransactionId ?? _provisionalTransactionId ?? 0;
         if (payload.TryGetProperty("transactionId", out var transactionElement) && transactionElement.ValueKind == JsonValueKind.Number && transactionElement.TryGetInt32(out var providedTransactionId))
         {
             requestedId = providedTransactionId;
         }
 
-        if (_activeTransactionId.Value != requestedId)
+        if (_activeTransactionId.HasValue && _activeTransactionId.Value != requestedId)
         {
             await SendCallResultAsync(uniqueId, new Dictionary<string, object>
             {
@@ -1360,7 +1385,7 @@ public sealed class ChargerClient
 
     private async Task StopChargingSequenceAsync(string reason, StateInitiator initiator, CancellationToken cancellationToken)
     {
-        if (!_activeTransactionId.HasValue)
+        if (!GetCurrentTransactionId().HasValue)
         {
             TransitionVehicleState("Available", initiator);
             await SendStatusNotificationAsync("Available", cancellationToken).ConfigureAwait(false);
@@ -1386,6 +1411,12 @@ public sealed class ChargerClient
 
         TransitionVehicleState("Available", initiator);
         await SendStatusNotificationAsync("Available", cancellationToken).ConfigureAwait(false);
+
+        if (!_activeTransactionId.HasValue)
+        {
+            _provisionalTransactionId = null;
+            _activeIdTag = null;
+        }
     }
 
     private async Task<bool> SendStopTransactionAsync(string reason, CancellationToken cancellationToken)
@@ -1441,6 +1472,7 @@ public sealed class ChargerClient
             PublishSample(new MeterSample(_meterAccumulatorWh, 0, 0, _supportSoC ? FixedStateOfCharge : -1, DateTimeOffset.UtcNow));
             PersistMeterAccumulator();
             _activeTransactionId = null;
+            _provisionalTransactionId = null;
             _activeIdTag = null;
             _meterStartValue = (int)Math.Round(_meterAccumulatorWh, MidpointRounding.AwayFromZero);
             _meterValue = _meterStartValue;
@@ -2072,9 +2104,10 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
             },
         };
 
-        if (_activeTransactionId.HasValue)
+        var transactionId = GetCurrentTransactionId();
+        if (transactionId.HasValue)
         {
-            payload["transactionId"] = _activeTransactionId.Value;
+            payload["transactionId"] = transactionId.Value;
         }
 
         await SendCallAsync(uniqueId, "MeterValues", payload, cancellationToken).ConfigureAwait(false);
