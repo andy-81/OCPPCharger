@@ -215,6 +215,17 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
             meter_values_sampled_data = meterValues.MeterValuesSampledData,
             meter_value_sample_interval = meterValues.MeterValueSampleInterval,
             clock_aligned_data_interval = meterValues.ClockAlignedDataInterval,
+            meter_value_metrics = new
+            {
+                energyActiveImportRegister = meterValues.EnergyActiveImportRegisterMetric,
+                powerActiveImport = meterValues.PowerActiveImportMetric,
+                frequency = meterValues.FrequencyMetric,
+                powerOffered = meterValues.PowerOfferedMetric,
+                currentOffered = meterValues.CurrentOfferedMetric,
+                soc = meterValues.SoCMetric,
+                energyActiveExportRegister = meterValues.EnergyActiveExportRegisterMetric,
+                powerActiveExport = meterValues.PowerActiveExportMetric,
+            },
         },
     });
 });
@@ -252,6 +263,26 @@ app.MapPost("/api/bootstrap", async (BootstrapRequest request, SimulatorConfigur
         ChargerId = request.ChargerId,
         ChargePointSerialNumber = cpSerial,
         ChargeBoxSerialNumber = cbSerial,
+        EnergyActiveImportRegisterMetric = string.IsNullOrWhiteSpace(request.EnergyActiveImportRegister)
+            ? "Energy.Active.Import.Register"
+            : request.EnergyActiveImportRegister.Trim(),
+        PowerActiveImportMetric = string.IsNullOrWhiteSpace(request.PowerActiveImport)
+            ? "Power.Active.Import"
+            : request.PowerActiveImport.Trim(),
+        FrequencyMetric = string.IsNullOrWhiteSpace(request.Frequency) ? "Frequency" : request.Frequency.Trim(),
+        PowerOfferedMetric = string.IsNullOrWhiteSpace(request.PowerOffered)
+            ? "Power.Offered"
+            : request.PowerOffered.Trim(),
+        CurrentOfferedMetric = string.IsNullOrWhiteSpace(request.CurrentOffered)
+            ? "Current.Offered"
+            : request.CurrentOffered.Trim(),
+        SoCMetric = string.IsNullOrWhiteSpace(request.SoC) ? "SoC" : request.SoC.Trim(),
+        EnergyActiveExportRegisterMetric = string.IsNullOrWhiteSpace(request.EnergyActiveExportRegister)
+            ? "Energy.Active.Export.Register"
+            : request.EnergyActiveExportRegister.Trim(),
+        PowerActiveExportMetric = string.IsNullOrWhiteSpace(request.PowerActiveExport)
+            ? "Power.Active.Export"
+            : request.PowerActiveExport.Trim(),
         MeterValuesSampledData = string.IsNullOrWhiteSpace(request.MeterValuesSampledData)
             ? SimulatorOptions.DefaultMeterValuesSampledData
             : request.MeterValuesSampledData.Trim(),
@@ -297,6 +328,14 @@ record BootstrapRequest(
     string ChargerId,
     string ChargePointSerialNumber,
     string ChargeBoxSerialNumber,
+    string? EnergyActiveImportRegister,
+    string? PowerActiveImport,
+    string? Frequency,
+    string? PowerOffered,
+    string? CurrentOffered,
+    string? SoC,
+    string? EnergyActiveExportRegister,
+    string? PowerActiveExport,
     string? MeterValuesSampledData,
     int? MeterValueSampleInterval,
     int? ClockAlignedDataInterval);

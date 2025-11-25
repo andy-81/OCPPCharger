@@ -316,6 +316,30 @@ button:active {
   gap: 0.75rem;
 }
 
+.metric-toggle-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.metric-toggle-group .group-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.metric-input-grid {
+  display: grid;
+  gap: 0.6rem 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.metric-input-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
 @media (min-width: 640px) {
   .split-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));

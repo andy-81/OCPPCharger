@@ -26,6 +26,18 @@ const configCancelButton = document.getElementById("config-cancel");
 const configMeterValuesSampledInput = document.getElementById("config-meter-values-sampled");
 const configMeterValueSampleIntervalInput = document.getElementById("config-meter-value-sample-interval");
 const configClockAlignedDataIntervalInput = document.getElementById("config-clock-aligned-data-interval");
+const configMetricEnergyActiveImportRegisterInput = document.getElementById(
+  "config-metric-energy-active-import-register",
+);
+const configMetricPowerActiveImportInput = document.getElementById("config-metric-power-active-import");
+const configMetricFrequencyInput = document.getElementById("config-metric-frequency");
+const configMetricPowerOfferedInput = document.getElementById("config-metric-power-offered");
+const configMetricCurrentOfferedInput = document.getElementById("config-metric-current-offered");
+const configMetricSocInput = document.getElementById("config-metric-soc");
+const configMetricEnergyActiveExportRegisterInput = document.getElementById(
+  "config-metric-energy-active-export-register",
+);
+const configMetricPowerActiveExportInput = document.getElementById("config-metric-power-active-export");
 const preparingBtn = document.getElementById("btn-preparing");
 const startChargingBtn = document.getElementById("btn-start-charging");
 const stopChargingBtn = document.getElementById("btn-stop-charging");
@@ -43,6 +55,16 @@ let chargeBoxSerialNumber = "0";
 let meterValuesSampledData = "";
 let meterValueSampleInterval = 0;
 let clockAlignedDataInterval = 0;
+let meterValueMetrics = {
+  energyActiveImportRegister: "Energy.Active.Import.Register",
+  powerActiveImport: "Power.Active.Import",
+  frequency: "Frequency",
+  powerOffered: "Power.Offered",
+  currentOffered: "Current.Offered",
+  soc: "SoC",
+  energyActiveExportRegister: "Energy.Active.Export.Register",
+  powerActiveExport: "Power.Active.Export",
+};
 
 const maxLogs = 500;
 
@@ -189,6 +211,27 @@ function populateConfigurationForm() {
   if (configClockAlignedDataIntervalInput) {
     configClockAlignedDataIntervalInput.value = clockAlignedDataInterval > 0 ? clockAlignedDataInterval : "";
   }
+
+  populateMetricToggleInputs();
+}
+
+function populateMetricToggleInputs() {
+  const mapping = [
+    [configMetricEnergyActiveImportRegisterInput, "energyActiveImportRegister"],
+    [configMetricPowerActiveImportInput, "powerActiveImport"],
+    [configMetricFrequencyInput, "frequency"],
+    [configMetricPowerOfferedInput, "powerOffered"],
+    [configMetricCurrentOfferedInput, "currentOffered"],
+    [configMetricSocInput, "soc"],
+    [configMetricEnergyActiveExportRegisterInput, "energyActiveExportRegister"],
+    [configMetricPowerActiveExportInput, "powerActiveExport"],
+  ];
+
+  mapping.forEach(([input, key]) => {
+    if (input) {
+      input.value = meterValueMetrics[key] ?? "";
+    }
+  });
 }
 
 function showConfigurationModal() {
@@ -308,6 +351,14 @@ function renderConfiguration() {
   if (clockAlignedDataInterval > 0) {
     entries.push(["Clock Aligned Data Interval", `${clockAlignedDataInterval} seconds`]);
   }
+  entries.push(["Energy.Active.Import.Register", meterValueMetrics.energyActiveImportRegister || "(disabled)"]);
+  entries.push(["Power.Active.Import", meterValueMetrics.powerActiveImport || "(disabled)"]);
+  entries.push(["Frequency", meterValueMetrics.frequency || "(disabled)"]);
+  entries.push(["Power.Offered", meterValueMetrics.powerOffered || "(disabled)"]);
+  entries.push(["Current.Offered", meterValueMetrics.currentOffered || "(disabled)"]);
+  entries.push(["SoC", meterValueMetrics.soc || "(disabled)"]);
+  entries.push(["Energy.Active.Export.Register", meterValueMetrics.energyActiveExportRegister || "(disabled)"]);
+  entries.push(["Power.Active.Export", meterValueMetrics.powerActiveExport || "(disabled)"]);
 
   for (const [key, value] of entries) {
     const row = document.createElement("tr");
@@ -392,6 +443,22 @@ async function loadSnapshot() {
         meterConfig.clock_aligned_data_interval ?? meterConfig.clockAlignedDataInterval ?? 0,
       );
       clockAlignedDataInterval = Number.isFinite(parsedClockAlignedInterval) ? parsedClockAlignedInterval : 0;
+
+      const metricConfig = meterConfig.meter_value_metrics ?? {};
+      meterValueMetrics = {
+        energyActiveImportRegister:
+          metricConfig.energyActiveImportRegister ?? metricConfig.enableEnergyActiveImportRegister ?? "Energy.Active.Import.Register",
+        powerActiveImport:
+          metricConfig.powerActiveImport ?? metricConfig.enablePowerActiveImport ?? "Power.Active.Import",
+        frequency: metricConfig.frequency ?? metricConfig.enableFrequency ?? "Frequency",
+        powerOffered: metricConfig.powerOffered ?? metricConfig.enablePowerOffered ?? "Power.Offered",
+        currentOffered: metricConfig.currentOffered ?? metricConfig.enableCurrentOffered ?? "Current.Offered",
+        soc: metricConfig.soc ?? metricConfig.enableSoC ?? "SoC",
+        energyActiveExportRegister:
+          metricConfig.energyActiveExportRegister ?? metricConfig.enableEnergyActiveExportRegister ?? "Energy.Active.Export.Register",
+        powerActiveExport:
+          metricConfig.powerActiveExport ?? metricConfig.enablePowerActiveExport ?? "Power.Active.Export",
+      };
     }
 
     if (typeof snapshot.loggingEnabled === "boolean") {
@@ -618,6 +685,17 @@ function setupControls(connection) {
       return;
     }
 
+    const metricValues = {
+      energyActiveImportRegister: (configMetricEnergyActiveImportRegisterInput?.value ?? "").trim(),
+      powerActiveImport: (configMetricPowerActiveImportInput?.value ?? "").trim(),
+      frequency: (configMetricFrequencyInput?.value ?? "").trim(),
+      powerOffered: (configMetricPowerOfferedInput?.value ?? "").trim(),
+      currentOffered: (configMetricCurrentOfferedInput?.value ?? "").trim(),
+      soc: (configMetricSocInput?.value ?? "").trim(),
+      energyActiveExportRegister: (configMetricEnergyActiveExportRegisterInput?.value ?? "").trim(),
+      powerActiveExport: (configMetricPowerActiveExportInput?.value ?? "").trim(),
+    };
+
     const payload = {
       url: urlValue,
       identity: identityValue,
@@ -625,6 +703,14 @@ function setupControls(connection) {
       chargerId: chargerValue,
       chargePointSerialNumber: cpSerialValue,
       chargeBoxSerialNumber: cbSerialValue,
+      energyActiveImportRegister: metricValues.energyActiveImportRegister,
+      powerActiveImport: metricValues.powerActiveImport,
+      frequency: metricValues.frequency,
+      powerOffered: metricValues.powerOffered,
+      currentOffered: metricValues.currentOffered,
+      soC: metricValues.soc,
+      energyActiveExportRegister: metricValues.energyActiveExportRegister,
+      powerActiveExport: metricValues.powerActiveExport,
       meterValuesSampledData: meterValuesCsv,
       meterValueSampleInterval: sampleIntervalValue,
       clockAlignedDataInterval: clockAlignedIntervalValue,
@@ -642,6 +728,7 @@ function setupControls(connection) {
       meterValuesSampledData = meterValuesCsv;
       meterValueSampleInterval = sampleIntervalValue;
       clockAlignedDataInterval = clockAlignedIntervalValue;
+      meterValueMetrics = metricValues;
       await postJson("/api/bootstrap", payload);
       await loadSnapshot();
       setConfigurationRequirement(false);
