@@ -56,6 +56,7 @@ public sealed class ChargerClient
     private readonly int _connectorId;
     private readonly Vehicle _vehicle = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pendingCalls = new();
+    private readonly ConcurrentDictionary<string, PendingStartTransaction> _pendingStartTransactions = new();
     private readonly Dictionary<string, string> _configuration = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _bootPayload;
     private readonly HashSet<string> _localAuthorizationList = new(StringComparer.OrdinalIgnoreCase);
@@ -63,6 +64,7 @@ public sealed class ChargerClient
     private readonly Random _random = new();
     private string? _activeIdTag;
     private int? _activeTransactionId;
+    private int? _provisionalTransactionId;
     private int _meterStartValue;
     private int _meterValue;
     private double _meterAccumulatorWh;
@@ -85,6 +87,8 @@ public sealed class ChargerClient
         User,
         Remote,
     }
+
+    private sealed record PendingStartTransaction(string UniqueId, string IdTag);
 
     private StateInitiator _lastStateInitiator = StateInitiator.System;
 
@@ -143,39 +147,43 @@ public sealed class ChargerClient
         if (string.Equals(status, "Charging", StringComparison.OrdinalIgnoreCase))
         {
             var idTag = _activeIdTag ?? GetFallbackIdTag();
-            if (!_activeTransactionId.HasValue)
+            if (!GetCurrentTransactionId().HasValue)
             {
-                StopMeterValueLoop();
-                return BeginChargingSequenceAsync(idTag, default, null, StateInitiator.User, cancellationToken);
+                return StartChargingSequenceAsync(idTag, default, StateInitiator.User, cancellationToken);
             }
 
             TransitionVehicleState("Charging", StateInitiator.User);
             return SendStatusNotificationAsync("Charging", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false);
         }
 
+        if (string.Equals(status, "Preparing", StringComparison.OrdinalIgnoreCase))
+        {
+            return EnterPreparingStateAsync(StateInitiator.User, cancellationToken);
+        }
+
         if (string.Equals(status, "Available", StringComparison.OrdinalIgnoreCase))
         {
-            return HandleManualAvailableAsync(cancellationToken);
+            return StopChargingSequenceAsync("Local", StateInitiator.User, cancellationToken);
         }
 
         UpdateLocalVehicleState(status, StateInitiator.User);
         return SendStatusNotificationAsync(status, cancellationToken);
     }
 
-    private async Task HandleManualAvailableAsync(CancellationToken cancellationToken)
-    {
-        if (_activeTransactionId.HasValue)
-        {
-            TransitionVehicleState("Finishing", StateInitiator.User);
-            await SendStatusNotificationAsync("Finishing", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
-            StopMeterValueLoop();
-            await SendStopTransactionAsync("Local", cancellationToken).ConfigureAwait(false);
-            await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken).ConfigureAwait(false);
-        }
+    public Task EnterPreparingAsync(CancellationToken cancellationToken)
+        => EnterPreparingStateAsync(StateInitiator.User, cancellationToken);
 
-        TransitionVehicleState("Available", StateInitiator.User);
-        await SendStatusNotificationAsync("Available", cancellationToken).ConfigureAwait(false);
+    public Task StartChargingFromUserAsync(CancellationToken cancellationToken)
+    {
+        var idTag = _activeIdTag ?? GetFallbackIdTag();
+        return StartChargingSequenceAsync(idTag, default, StateInitiator.User, cancellationToken);
     }
+
+    public Task StopChargingFromUserAsync(string reason, CancellationToken cancellationToken)
+        => StopChargingSequenceAsync(reason, StateInitiator.User, cancellationToken);
+
+    private Task HandleManualAvailableAsync(CancellationToken cancellationToken)
+        => StopChargingSequenceAsync("Local", StateInitiator.User, cancellationToken);
 
     public Task StartManualSimulationAsync(CancellationToken cancellationToken)
     {
@@ -184,7 +192,7 @@ public sealed class ChargerClient
 
         lock (_manualLock)
         {
-            if (_manualSimulationCts is not null || _activeTransactionId.HasValue)
+            if (_manualSimulationCts is not null || GetCurrentTransactionId().HasValue)
             {
                 return Task.CompletedTask;
             }
@@ -441,7 +449,7 @@ public sealed class ChargerClient
                     await SendStatusNotificationAsync(reportedState, cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
                     await SendBootMeterValuesAsync(cancellationToken).ConfigureAwait(false);
 
-                    if (_activeTransactionId.HasValue)
+                    if (GetCurrentTransactionId().HasValue)
                     {
                         StartMeterValueLoop(cancellationToken);
                         StartClockAlignedMeterValueLoop(cancellationToken);
@@ -516,7 +524,7 @@ public sealed class ChargerClient
                     await HandleCallAsync(root, cancellationToken).ConfigureAwait(false);
                     break;
                 case 3:
-                    HandleCallResult(root);
+                    await HandleCallResultAsync(root, cancellationToken).ConfigureAwait(false);
                     break;
                 case 4:
                     HandleCallError(root);
@@ -582,17 +590,7 @@ public sealed class ChargerClient
             ? providedIdTag
             : GetFallbackIdTag();
 
-        if (!IsVehiclePluggedIn())
-        {
-            _logger.Info("RemoteStartTransaction rejected: vehicle not connected.");
-            await SendCallResultAsync(uniqueId, new Dictionary<string, object>
-            {
-                ["status"] = "Rejected",
-            }, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        if (_activeTransactionId.HasValue)
+        if (GetCurrentTransactionId().HasValue)
         {
             _logger.Info("RemoteStartTransaction acknowledged: transaction already active.");
             await SendCallResultAsync(uniqueId, new Dictionary<string, object>
@@ -603,59 +601,79 @@ public sealed class ChargerClient
             return;
         }
 
-        _activeIdTag = idTag;
-        StopMeterValueLoop();
-        await BeginChargingSequenceAsync(idTag, payload, uniqueId, StateInitiator.Remote, cancellationToken).ConfigureAwait(false);
-    }
+        var state = _vehicle.State;
+        if (!string.Equals(state, "Available", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(state, "Preparing", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.Info($"RemoteStartTransaction rejected: connector in state {state}.");
+            await SendCallResultAsync(uniqueId, new Dictionary<string, object>
+            {
+                ["status"] = "Rejected",
+            }, cancellationToken).ConfigureAwait(false);
+            return;
+        }
 
-private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload, string? callUniqueId, StateInitiator initiator, CancellationToken cancellationToken)
-{
-    _activeIdTag = idTag;
-    TransitionVehicleState("Preparing", initiator);
-    _logger.Info($"Vehicle state updated to: {_vehicle.State}");
-
-    if (!string.IsNullOrEmpty(callUniqueId))
-    {
-        await SendCallResultAsync(callUniqueId!, new Dictionary<string, object>
+        await SendCallResultAsync(uniqueId, new Dictionary<string, object>
         {
             ["status"] = "Accepted",
         }, cancellationToken).ConfigureAwait(false);
+
+        await StartChargingSequenceAsync(idTag, payload, StateInitiator.Remote, cancellationToken, enterPreparing: true).ConfigureAwait(false);
     }
 
-    await SendStatusNotificationAsync("Preparing", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
-
-    var started = await SendStartTransactionAsync(idTag, payload, cancellationToken).ConfigureAwait(false);
-    if (!started)
+    private async Task EnterPreparingStateAsync(StateInitiator initiator, CancellationToken cancellationToken)
     {
-        TransitionVehicleState("SuspendedEV", initiator);
-        _activeIdTag = null;
-        await SendStatusNotificationAsync("SuspendedEV", cancellationToken, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        return;
+        if (string.Equals(_vehicle.State, "Preparing", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        TransitionVehicleState("Preparing", initiator);
+        _logger.Info($"Vehicle state updated to: {_vehicle.State}");
+        await SendStatusNotificationAsync("Preparing", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
     }
 
-    try
+    private async Task StartChargingSequenceAsync(string idTag, JsonElement payload, StateInitiator initiator, CancellationToken cancellationToken, bool enterPreparing = true)
     {
-        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+        _activeIdTag = idTag;
+
+        if (!_activeTransactionId.HasValue)
+        {
+            EnsureProvisionalTransactionId();
+        }
+
+        if (enterPreparing)
+        {
+            await EnterPreparingStateAsync(initiator, cancellationToken).ConfigureAwait(false);
+        }
+
+        var startTransactionTask = _activeTransactionId.HasValue
+            ? Task.FromResult(true)
+            : SendStartTransactionAsync(idTag, payload, cancellationToken);
+
+        TransitionVehicleState("Charging", initiator);
+        _logger.Info($"Vehicle state updated to: {_vehicle.State}");
+
+        await SendStatusNotificationAsync("Charging", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
+
+        await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
+
+        StartMeterValueLoop(cancellationToken);
+        StartClockAlignedMeterValueLoop(cancellationToken);
+
+        var started = await startTransactionTask.ConfigureAwait(false);
+        if (!started)
+        {
+            _logger.Warn("StartTransaction failed or timed out; continuing session in Charging state.");
+        }
     }
-    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-    {
-        return;
-    }
-
-    TransitionVehicleState("Charging", initiator);
-    _logger.Info($"Vehicle state updated to: {_vehicle.State}");
-
-    await SendStatusNotificationAsync("Charging", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
-
-    StartMeterValueLoop(cancellationToken);
-    StartClockAlignedMeterValueLoop(cancellationToken);
-    await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
-}
 
     private async Task<bool> SendStartTransactionAsync(string idTag, JsonElement payload, CancellationToken cancellationToken)
     {
         var uniqueId = GenerateUniqueId();
         var tcs = RegisterCall(uniqueId);
+        var pendingStart = new PendingStartTransaction(uniqueId, idTag);
+        _pendingStartTransactions[uniqueId] = pendingStart;
 
         _meterStartValue = (int)Math.Round(_meterAccumulatorWh, MidpointRounding.AwayFromZero);
         _meterValue = _meterStartValue;
@@ -677,47 +695,86 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
         await SendCallAsync(uniqueId, "StartTransaction", request, cancellationToken).ConfigureAwait(false);
 
+        var keepPendingForLateResponse = false;
         try
         {
             var completed = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(35), cancellationToken));
             if (completed != tcs.Task)
             {
-                _logger.Error("StartTransaction response timed out");
-                return false;
+                _logger.Warn("StartTransaction response timed out; awaiting potential late confirmation while continuing.");
+                keepPendingForLateResponse = true;
+                return true;
             }
 
             var response = await tcs.Task.ConfigureAwait(false);
+            return await ApplyStartTransactionResponseAsync(uniqueId, response, pendingStart, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!keepPendingForLateResponse)
+            {
+                _pendingStartTransactions.TryRemove(uniqueId, out _);
+            }
 
+            _pendingCalls.TryRemove(uniqueId, out _);
+        }
+    }
+
+    private async Task<bool> ApplyStartTransactionResponseAsync(string uniqueId, JsonElement response, PendingStartTransaction pendingStart, CancellationToken cancellationToken)
+    {
+        try
+        {
             if (!TryGetInt32(response, "transactionId", out var transactionId))
             {
                 _logger.Error($"StartTransaction missing transactionId: {response.ToString()}");
                 return false;
             }
 
-            if (response.ValueKind == JsonValueKind.Object && response.TryGetProperty("idTagInfo", out var idTagInfo) && TryGetString(idTagInfo, "status", out var status) && !string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase))
+            var status = "Accepted";
+            if (response.ValueKind == JsonValueKind.Object && response.TryGetProperty("idTagInfo", out var idTagInfo) && TryGetString(idTagInfo, "status", out var parsedStatus))
             {
-                _logger.Error($"StartTransaction rejected with status: {status}");
-                return false;
+                status = parsedStatus;
             }
 
             _activeTransactionId = transactionId;
-            _logger.Info($"Transaction {transactionId} started for idTag {idTag}");
-            return true;
+            if (_provisionalTransactionId.HasValue && _provisionalTransactionId.Value != transactionId)
+            {
+                _logger.Info($"Replacing provisional transaction {_provisionalTransactionId.Value} with confirmed transaction {transactionId}.");
+            }
+            _provisionalTransactionId = null;
+            _logger.Info($"StartTransaction confirmation received for idTag {pendingStart.IdTag} with transaction {transactionId} (status: {status}).");
+
+            if (string.Equals(status, "Accepted", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            _logger.Warn($"StartTransaction returned status {status}; stopping charging session.");
+            await StopChargingSequenceAsync("DeAuthorized", _lastStateInitiator, cancellationToken).ConfigureAwait(false);
+            return false;
         }
         finally
         {
-            _pendingCalls.TryRemove(uniqueId, out _);
+            _pendingStartTransactions.TryRemove(uniqueId, out _);
         }
+    }
+
+    private int? GetCurrentTransactionId()
+        => _activeTransactionId ?? _provisionalTransactionId;
+
+    private int EnsureProvisionalTransactionId()
+    {
+        if (!_provisionalTransactionId.HasValue)
+        {
+            _provisionalTransactionId = -Math.Abs(_random.Next(1, int.MaxValue));
+        }
+
+        return _provisionalTransactionId.Value;
     }
 
     private void StartMeterValueLoop(CancellationToken parentToken)
     {
         StopMeterValueLoop();
-
-        if (!_activeTransactionId.HasValue)
-        {
-            return;
-        }
 
         var interval = GetMeterSampleInterval();
         if (interval <= TimeSpan.Zero)
@@ -733,12 +790,17 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         {
             try
             {
-                while (!loopToken.IsCancellationRequested && _activeTransactionId.HasValue)
+                while (!loopToken.IsCancellationRequested)
                 {
                     await Task.Delay(interval, loopToken).ConfigureAwait(false);
-                    if (loopToken.IsCancellationRequested || !_activeTransactionId.HasValue)
+                    if (loopToken.IsCancellationRequested)
                     {
                         break;
+                    }
+
+                    if (!GetCurrentTransactionId().HasValue)
+                    {
+                        continue;
                     }
 
                     await SendMeterValuesAsync(loopToken).ConfigureAwait(false);
@@ -781,11 +843,6 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
     {
         StopClockAlignedMeterValueLoop();
 
-        if (!_activeTransactionId.HasValue)
-        {
-            return;
-        }
-
         var interval = GetClockAlignedInterval();
         if (interval <= TimeSpan.Zero)
         {
@@ -800,13 +857,18 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         {
             try
             {
-                while (!loopToken.IsCancellationRequested && _activeTransactionId.HasValue)
+                while (!loopToken.IsCancellationRequested)
                 {
                     var delay = GetDelayUntilNextAlignment(interval);
                     await Task.Delay(delay, loopToken).ConfigureAwait(false);
-                    if (loopToken.IsCancellationRequested || !_activeTransactionId.HasValue)
+                    if (loopToken.IsCancellationRequested)
                     {
                         break;
+                    }
+
+                    if (!GetCurrentTransactionId().HasValue)
+                    {
+                        continue;
                     }
 
                     await SendMeterValuesAsync(loopToken, clockAligned: true).ConfigureAwait(false);
@@ -845,7 +907,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
     private void RestartMeterValueLoops(CancellationToken parentToken)
     {
-        if (!_activeTransactionId.HasValue)
+        if (!GetCurrentTransactionId().HasValue)
         {
             return;
         }
@@ -922,7 +984,8 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
     private async Task SendMeterValuesAsync(CancellationToken cancellationToken, bool clockAligned = false)
     {
-        if (!_activeTransactionId.HasValue)
+        var transactionId = GetCurrentTransactionId();
+        if (!transactionId.HasValue)
         {
             return;
         }
@@ -1003,14 +1066,17 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
                     context,
                     out var sampledValue))
             {
-                sampledValues.Add(sampledValue);
+                if (sampledValue is not null)
+                {
+                    sampledValues.Add(sampledValue);
+                }
             }
         }
 
         var payload = new Dictionary<string, object>
         {
             ["connectorId"] = _connectorId,
-            ["transactionId"] = _activeTransactionId.Value,
+            ["transactionId"] = transactionId.Value,
             ["meterValue"] = new object[]
             {
                 new Dictionary<string, object>
@@ -1115,7 +1181,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1133,7 +1199,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1152,7 +1218,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             normalizedValue = intervalSeconds.ToString(CultureInfo.InvariantCulture);
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1171,7 +1237,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             normalizedValue = intervalSeconds.ToString(CultureInfo.InvariantCulture);
             SetLocalConfiguration(key, normalizedValue);
 
-            if (_activeTransactionId.HasValue)
+            if (GetCurrentTransactionId().HasValue)
             {
                 RestartMeterValueLoops(cancellationToken);
             }
@@ -1268,7 +1334,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
 
     private async Task HandleRemoteStopTransactionAsync(string uniqueId, JsonElement payload, CancellationToken cancellationToken)
     {
-        if (!_activeTransactionId.HasValue)
+        if (!GetCurrentTransactionId().HasValue)
         {
             if (_manualSimulationActive)
             {
@@ -1293,13 +1359,13 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             return;
         }
 
-        var requestedId = _activeTransactionId.Value;
+        var requestedId = _activeTransactionId ?? _provisionalTransactionId ?? 0;
         if (payload.TryGetProperty("transactionId", out var transactionElement) && transactionElement.ValueKind == JsonValueKind.Number && transactionElement.TryGetInt32(out var providedTransactionId))
         {
             requestedId = providedTransactionId;
         }
 
-        if (_activeTransactionId.Value != requestedId)
+        if (_activeTransactionId.HasValue && _activeTransactionId.Value != requestedId)
         {
             await SendCallResultAsync(uniqueId, new Dictionary<string, object>
             {
@@ -1313,22 +1379,44 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             ["status"] = "Accepted",
         }, cancellationToken).ConfigureAwait(false);
 
-        TransitionVehicleState("Finishing", StateInitiator.Remote);
-        await SendStatusNotificationAsync("Finishing", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
+        await StopChargingSequenceAsync("Remote", StateInitiator.Remote, cancellationToken).ConfigureAwait(false);
+
+    }
+
+    private async Task StopChargingSequenceAsync(string reason, StateInitiator initiator, CancellationToken cancellationToken)
+    {
+        if (!GetCurrentTransactionId().HasValue)
+        {
+            TransitionVehicleState("Available", initiator);
+            await SendStatusNotificationAsync("Available", cancellationToken).ConfigureAwait(false);
+            return;
+        }
 
         StopMeterValueLoop();
 
-        var stopTask = SendStopTransactionAsync("Remote", cancellationToken);
+        await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
 
-        await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken).ConfigureAwait(false);
+        await SendStopTransactionAsync(reason, cancellationToken).ConfigureAwait(false);
 
-        TransitionVehicleState("SuspendedEV", StateInitiator.Remote);
-        _logger.Info($"Vehicle state updated to: {_vehicle.State}");
+        TransitionVehicleState("Finishing", initiator);
+        await SendStatusNotificationAsync("Finishing", cancellationToken, TimeSpan.FromSeconds(5), waitForResponse: false).ConfigureAwait(false);
 
-        await SendStatusNotificationAsync("SuspendedEV", cancellationToken, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
 
-        await stopTask.ConfigureAwait(false);
+        TransitionVehicleState("Available", initiator);
+        await SendStatusNotificationAsync("Available", cancellationToken).ConfigureAwait(false);
 
+        if (!_activeTransactionId.HasValue)
+        {
+            _provisionalTransactionId = null;
+            _activeIdTag = null;
+        }
     }
 
     private async Task<bool> SendStopTransactionAsync(string reason, CancellationToken cancellationToken)
@@ -1384,6 +1472,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             PublishSample(new MeterSample(_meterAccumulatorWh, 0, 0, _supportSoC ? FixedStateOfCharge : -1, DateTimeOffset.UtcNow));
             PersistMeterAccumulator();
             _activeTransactionId = null;
+            _provisionalTransactionId = null;
             _activeIdTag = null;
             _meterStartValue = (int)Math.Round(_meterAccumulatorWh, MidpointRounding.AwayFromZero);
             _meterValue = _meterStartValue;
@@ -1534,7 +1623,7 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private void HandleCallResult(JsonElement message)
+    private async Task HandleCallResultAsync(JsonElement message, CancellationToken cancellationToken)
     {
         if (message.GetArrayLength() < 3)
         {
@@ -1548,9 +1637,20 @@ private async Task BeginChargingSequenceAsync(string idTag, JsonElement payload,
             return;
         }
 
-        if (_pendingCalls.TryRemove(uniqueId, out var tcs) && !tcs.Task.IsCompleted)
+        var payload = message[2].Clone();
+        var pendingCall = _pendingCalls.TryGetValue(uniqueId, out var tcs) ? tcs : null;
+        var hadPendingCall = pendingCall is not null;
+
+        if (pendingCall is not null && !pendingCall.Task.IsCompleted)
         {
-            tcs.TrySetResult(message[2].Clone());
+            pendingCall.TrySetResult(payload);
+        }
+
+        _pendingCalls.TryRemove(uniqueId, out _);
+
+        if (_pendingStartTransactions.TryGetValue(uniqueId, out var pendingStart) && !hadPendingCall)
+        {
+            await ApplyStartTransactionResponseAsync(uniqueId, payload, pendingStart, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -2004,9 +2104,10 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
             },
         };
 
-        if (_activeTransactionId.HasValue)
+        var transactionId = GetCurrentTransactionId();
+        if (transactionId.HasValue)
         {
-            payload["transactionId"] = _activeTransactionId.Value;
+            payload["transactionId"] = transactionId.Value;
         }
 
         await SendCallAsync(uniqueId, "MeterValues", payload, cancellationToken).ConfigureAwait(false);
