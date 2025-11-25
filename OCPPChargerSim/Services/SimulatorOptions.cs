@@ -9,21 +9,21 @@ public sealed class SimulatorOptions
     public const int DefaultMeterValueSampleInterval = 15;
     public const int DefaultClockAlignedDataInterval = 60;
 
-    public bool EnableEnergyActiveImportRegister { get; set; } = true;
+    public string EnergyActiveImportRegisterMetric { get; set; } = "Energy.Active.Import.Register";
 
-    public bool EnablePowerActiveImport { get; set; } = true;
+    public string PowerActiveImportMetric { get; set; } = "Power.Active.Import";
 
-    public bool EnableFrequency { get; set; } = true;
+    public string FrequencyMetric { get; set; } = "Frequency";
 
-    public bool EnablePowerOffered { get; set; } = true;
+    public string PowerOfferedMetric { get; set; } = "Power.Offered";
 
-    public bool EnableCurrentOffered { get; set; } = true;
+    public string CurrentOfferedMetric { get; set; } = "Current.Offered";
 
-    public bool EnableSoC { get; set; } = true;
+    public string SoCMetric { get; set; } = "SoC";
 
-    public bool EnableEnergyActiveExportRegister { get; set; } = true;
+    public string EnergyActiveExportRegisterMetric { get; set; } = "Energy.Active.Export.Register";
 
-    public bool EnablePowerActiveExport { get; set; } = true;
+    public string PowerActiveExportMetric { get; set; } = "Power.Active.Export";
 
     public string? Url { get; set; }
 
@@ -51,16 +51,25 @@ public sealed class SimulatorOptions
 
     public Dictionary<string, bool> GetMeterValueMetricToggles()
     {
-        return new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+        var result = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        void AddIfPresent(string value)
         {
-            ["Energy.Active.Import.Register"] = EnableEnergyActiveImportRegister,
-            ["Power.Active.Import"] = EnablePowerActiveImport,
-            ["Frequency"] = EnableFrequency,
-            ["Power.Offered"] = EnablePowerOffered,
-            ["Current.Offered"] = EnableCurrentOffered,
-            ["SoC"] = EnableSoC,
-            ["Energy.Active.Export.Register"] = EnableEnergyActiveExportRegister,
-            ["Power.Active.Export"] = EnablePowerActiveExport,
-        };
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                result[value] = true;
+            }
+        }
+
+        AddIfPresent(EnergyActiveImportRegisterMetric);
+        AddIfPresent(PowerActiveImportMetric);
+        AddIfPresent(FrequencyMetric);
+        AddIfPresent(PowerOfferedMetric);
+        AddIfPresent(CurrentOfferedMetric);
+        AddIfPresent(SoCMetric);
+        AddIfPresent(EnergyActiveExportRegisterMetric);
+        AddIfPresent(PowerActiveExportMetric);
+
+        return result;
     }
 }

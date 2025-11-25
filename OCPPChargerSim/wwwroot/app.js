@@ -55,15 +55,15 @@ let chargeBoxSerialNumber = "0";
 let meterValuesSampledData = "";
 let meterValueSampleInterval = 0;
 let clockAlignedDataInterval = 0;
-let meterValueMetricToggles = {
-  energyActiveImportRegister: true,
-  powerActiveImport: true,
-  frequency: true,
-  powerOffered: true,
-  currentOffered: true,
-  soc: true,
-  energyActiveExportRegister: true,
-  powerActiveExport: true,
+let meterValueMetrics = {
+  energyActiveImportRegister: "Energy.Active.Import.Register",
+  powerActiveImport: "Power.Active.Import",
+  frequency: "Frequency",
+  powerOffered: "Power.Offered",
+  currentOffered: "Current.Offered",
+  soc: "SoC",
+  energyActiveExportRegister: "Energy.Active.Export.Register",
+  powerActiveExport: "Power.Active.Export",
 };
 
 const maxLogs = 500;
@@ -229,7 +229,7 @@ function populateMetricToggleInputs() {
 
   mapping.forEach(([input, key]) => {
     if (input) {
-      input.checked = Boolean(meterValueMetricToggles[key]);
+      input.value = meterValueMetrics[key] ?? "";
     }
   });
 }
@@ -351,20 +351,14 @@ function renderConfiguration() {
   if (clockAlignedDataInterval > 0) {
     entries.push(["Clock Aligned Data Interval", `${clockAlignedDataInterval} seconds`]);
   }
-  entries.push([
-    "Energy.Active.Import.Register",
-    meterValueMetricToggles.energyActiveImportRegister ? "Enabled" : "Disabled",
-  ]);
-  entries.push(["Power.Active.Import", meterValueMetricToggles.powerActiveImport ? "Enabled" : "Disabled"]);
-  entries.push(["Frequency", meterValueMetricToggles.frequency ? "Enabled" : "Disabled"]);
-  entries.push(["Power.Offered", meterValueMetricToggles.powerOffered ? "Enabled" : "Disabled"]);
-  entries.push(["Current.Offered", meterValueMetricToggles.currentOffered ? "Enabled" : "Disabled"]);
-  entries.push(["SoC", meterValueMetricToggles.soc ? "Enabled" : "Disabled"]);
-  entries.push([
-    "Energy.Active.Export.Register",
-    meterValueMetricToggles.energyActiveExportRegister ? "Enabled" : "Disabled",
-  ]);
-  entries.push(["Power.Active.Export", meterValueMetricToggles.powerActiveExport ? "Enabled" : "Disabled"]);
+  entries.push(["Energy.Active.Import.Register", meterValueMetrics.energyActiveImportRegister || "(disabled)"]);
+  entries.push(["Power.Active.Import", meterValueMetrics.powerActiveImport || "(disabled)"]);
+  entries.push(["Frequency", meterValueMetrics.frequency || "(disabled)"]);
+  entries.push(["Power.Offered", meterValueMetrics.powerOffered || "(disabled)"]);
+  entries.push(["Current.Offered", meterValueMetrics.currentOffered || "(disabled)"]);
+  entries.push(["SoC", meterValueMetrics.soc || "(disabled)"]);
+  entries.push(["Energy.Active.Export.Register", meterValueMetrics.energyActiveExportRegister || "(disabled)"]);
+  entries.push(["Power.Active.Export", meterValueMetrics.powerActiveExport || "(disabled)"]);
 
   for (const [key, value] of entries) {
     const row = document.createElement("tr");
@@ -451,17 +445,19 @@ async function loadSnapshot() {
       clockAlignedDataInterval = Number.isFinite(parsedClockAlignedInterval) ? parsedClockAlignedInterval : 0;
 
       const metricConfig = meterConfig.meter_value_metrics ?? {};
-      meterValueMetricToggles = {
+      meterValueMetrics = {
         energyActiveImportRegister:
-          metricConfig.enableEnergyActiveImportRegister ?? metricConfig.energyActiveImportRegister ?? true,
-        powerActiveImport: metricConfig.enablePowerActiveImport ?? metricConfig.powerActiveImport ?? true,
-        frequency: metricConfig.enableFrequency ?? metricConfig.frequency ?? true,
-        powerOffered: metricConfig.enablePowerOffered ?? metricConfig.powerOffered ?? true,
-        currentOffered: metricConfig.enableCurrentOffered ?? metricConfig.currentOffered ?? true,
-        soc: metricConfig.enableSoC ?? metricConfig.soc ?? true,
+          metricConfig.energyActiveImportRegister ?? metricConfig.enableEnergyActiveImportRegister ?? "Energy.Active.Import.Register",
+        powerActiveImport:
+          metricConfig.powerActiveImport ?? metricConfig.enablePowerActiveImport ?? "Power.Active.Import",
+        frequency: metricConfig.frequency ?? metricConfig.enableFrequency ?? "Frequency",
+        powerOffered: metricConfig.powerOffered ?? metricConfig.enablePowerOffered ?? "Power.Offered",
+        currentOffered: metricConfig.currentOffered ?? metricConfig.enableCurrentOffered ?? "Current.Offered",
+        soc: metricConfig.soc ?? metricConfig.enableSoC ?? "SoC",
         energyActiveExportRegister:
-          metricConfig.enableEnergyActiveExportRegister ?? metricConfig.energyActiveExportRegister ?? true,
-        powerActiveExport: metricConfig.enablePowerActiveExport ?? metricConfig.powerActiveExport ?? true,
+          metricConfig.energyActiveExportRegister ?? metricConfig.enableEnergyActiveExportRegister ?? "Energy.Active.Export.Register",
+        powerActiveExport:
+          metricConfig.powerActiveExport ?? metricConfig.enablePowerActiveExport ?? "Power.Active.Export",
       };
     }
 
@@ -689,19 +685,15 @@ function setupControls(connection) {
       return;
     }
 
-    const metricToggles = {
-      energyActiveImportRegister: configMetricEnergyActiveImportRegisterInput
-        ? configMetricEnergyActiveImportRegisterInput.checked
-        : true,
-      powerActiveImport: configMetricPowerActiveImportInput ? configMetricPowerActiveImportInput.checked : true,
-      frequency: configMetricFrequencyInput ? configMetricFrequencyInput.checked : true,
-      powerOffered: configMetricPowerOfferedInput ? configMetricPowerOfferedInput.checked : true,
-      currentOffered: configMetricCurrentOfferedInput ? configMetricCurrentOfferedInput.checked : true,
-      soc: configMetricSocInput ? configMetricSocInput.checked : true,
-      energyActiveExportRegister: configMetricEnergyActiveExportRegisterInput
-        ? configMetricEnergyActiveExportRegisterInput.checked
-        : true,
-      powerActiveExport: configMetricPowerActiveExportInput ? configMetricPowerActiveExportInput.checked : true,
+    const metricValues = {
+      energyActiveImportRegister: (configMetricEnergyActiveImportRegisterInput?.value ?? "").trim(),
+      powerActiveImport: (configMetricPowerActiveImportInput?.value ?? "").trim(),
+      frequency: (configMetricFrequencyInput?.value ?? "").trim(),
+      powerOffered: (configMetricPowerOfferedInput?.value ?? "").trim(),
+      currentOffered: (configMetricCurrentOfferedInput?.value ?? "").trim(),
+      soc: (configMetricSocInput?.value ?? "").trim(),
+      energyActiveExportRegister: (configMetricEnergyActiveExportRegisterInput?.value ?? "").trim(),
+      powerActiveExport: (configMetricPowerActiveExportInput?.value ?? "").trim(),
     };
 
     const payload = {
@@ -711,14 +703,14 @@ function setupControls(connection) {
       chargerId: chargerValue,
       chargePointSerialNumber: cpSerialValue,
       chargeBoxSerialNumber: cbSerialValue,
-      enableEnergyActiveImportRegister: metricToggles.energyActiveImportRegister,
-      enablePowerActiveImport: metricToggles.powerActiveImport,
-      enableFrequency: metricToggles.frequency,
-      enablePowerOffered: metricToggles.powerOffered,
-      enableCurrentOffered: metricToggles.currentOffered,
-      enableSoC: metricToggles.soc,
-      enableEnergyActiveExportRegister: metricToggles.energyActiveExportRegister,
-      enablePowerActiveExport: metricToggles.powerActiveExport,
+      energyActiveImportRegister: metricValues.energyActiveImportRegister,
+      powerActiveImport: metricValues.powerActiveImport,
+      frequency: metricValues.frequency,
+      powerOffered: metricValues.powerOffered,
+      currentOffered: metricValues.currentOffered,
+      soC: metricValues.soc,
+      energyActiveExportRegister: metricValues.energyActiveExportRegister,
+      powerActiveExport: metricValues.powerActiveExport,
       meterValuesSampledData: meterValuesCsv,
       meterValueSampleInterval: sampleIntervalValue,
       clockAlignedDataInterval: clockAlignedIntervalValue,
@@ -736,7 +728,7 @@ function setupControls(connection) {
       meterValuesSampledData = meterValuesCsv;
       meterValueSampleInterval = sampleIntervalValue;
       clockAlignedDataInterval = clockAlignedIntervalValue;
-      meterValueMetricToggles = metricToggles;
+      meterValueMetrics = metricValues;
       await postJson("/api/bootstrap", payload);
       await loadSnapshot();
       setConfigurationRequirement(false);

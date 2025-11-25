@@ -135,14 +135,14 @@ public sealed class SimulatorConfigurationProvider
             ["Identity"] = normalized.Identity,
             ["AuthKey"] = normalized.AuthKey,
             ["LogFile"] = normalized.LogFile,
-            ["EnableEnergyActiveImportRegister"] = normalized.EnableEnergyActiveImportRegister,
-            ["EnablePowerActiveImport"] = normalized.EnablePowerActiveImport,
-            ["EnableFrequency"] = normalized.EnableFrequency,
-            ["EnablePowerOffered"] = normalized.EnablePowerOffered,
-            ["EnableCurrentOffered"] = normalized.EnableCurrentOffered,
-            ["EnableSoC"] = normalized.EnableSoC,
-            ["EnableEnergyActiveExportRegister"] = normalized.EnableEnergyActiveExportRegister,
-            ["EnablePowerActiveExport"] = normalized.EnablePowerActiveExport,
+            ["EnergyActiveImportRegisterMetric"] = normalized.EnergyActiveImportRegisterMetric,
+            ["PowerActiveImportMetric"] = normalized.PowerActiveImportMetric,
+            ["FrequencyMetric"] = normalized.FrequencyMetric,
+            ["PowerOfferedMetric"] = normalized.PowerOfferedMetric,
+            ["CurrentOfferedMetric"] = normalized.CurrentOfferedMetric,
+            ["SoCMetric"] = normalized.SoCMetric,
+            ["EnergyActiveExportRegisterMetric"] = normalized.EnergyActiveExportRegisterMetric,
+            ["PowerActiveExportMetric"] = normalized.PowerActiveExportMetric,
             ["SupportSoC"] = normalized.SupportSoC,
             ["SupportHeartbeat"] = normalized.SupportHeartbeat,
             ["ChargerId"] = normalized.ChargerId,
@@ -210,14 +210,14 @@ public sealed class SimulatorConfigurationProvider
             Identity = string.IsNullOrWhiteSpace(options.Identity) ? null : options.Identity.Trim(),
             AuthKey = string.IsNullOrWhiteSpace(options.AuthKey) ? null : options.AuthKey.Trim(),
             LogFile = string.IsNullOrWhiteSpace(options.LogFile) ? "log.txt" : options.LogFile.Trim(),
-            EnableEnergyActiveImportRegister = options.EnableEnergyActiveImportRegister,
-            EnablePowerActiveImport = options.EnablePowerActiveImport,
-            EnableFrequency = options.EnableFrequency,
-            EnablePowerOffered = options.EnablePowerOffered,
-            EnableCurrentOffered = options.EnableCurrentOffered,
-            EnableSoC = options.EnableSoC,
-            EnableEnergyActiveExportRegister = options.EnableEnergyActiveExportRegister,
-            EnablePowerActiveExport = options.EnablePowerActiveExport,
+            EnergyActiveImportRegisterMetric = NormalizeMetric(options.EnergyActiveImportRegisterMetric, "Energy.Active.Import.Register"),
+            PowerActiveImportMetric = NormalizeMetric(options.PowerActiveImportMetric, "Power.Active.Import"),
+            FrequencyMetric = NormalizeMetric(options.FrequencyMetric, "Frequency"),
+            PowerOfferedMetric = NormalizeMetric(options.PowerOfferedMetric, "Power.Offered"),
+            CurrentOfferedMetric = NormalizeMetric(options.CurrentOfferedMetric, "Current.Offered"),
+            SoCMetric = NormalizeMetric(options.SoCMetric, "SoC"),
+            EnergyActiveExportRegisterMetric = NormalizeMetric(options.EnergyActiveExportRegisterMetric, "Energy.Active.Export.Register"),
+            PowerActiveExportMetric = NormalizeMetric(options.PowerActiveExportMetric, "Power.Active.Export"),
             SupportSoC = options.SupportSoC,
             SupportHeartbeat = options.SupportHeartbeat,
             ChargerId = chargerId,
@@ -227,6 +227,27 @@ public sealed class SimulatorConfigurationProvider
             MeterValueSampleInterval = sampleInterval,
             ClockAlignedDataInterval = clockAlignedInterval,
         };
+    }
+
+    private static string NormalizeMetric(string? value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        var trimmed = value.Trim();
+        if (string.Equals(trimmed, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return fallback;
+        }
+
+        if (string.Equals(trimmed, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return trimmed;
     }
 
     private bool HasRequiredValues(SimulatorOptions options)
@@ -245,14 +266,14 @@ public sealed class SimulatorConfigurationProvider
             Identity = options.Identity,
             AuthKey = options.AuthKey,
             LogFile = options.LogFile,
-            EnableEnergyActiveImportRegister = options.EnableEnergyActiveImportRegister,
-            EnablePowerActiveImport = options.EnablePowerActiveImport,
-            EnableFrequency = options.EnableFrequency,
-            EnablePowerOffered = options.EnablePowerOffered,
-            EnableCurrentOffered = options.EnableCurrentOffered,
-            EnableSoC = options.EnableSoC,
-            EnableEnergyActiveExportRegister = options.EnableEnergyActiveExportRegister,
-            EnablePowerActiveExport = options.EnablePowerActiveExport,
+            EnergyActiveImportRegisterMetric = NormalizeMetric(options.EnergyActiveImportRegisterMetric, "Energy.Active.Import.Register"),
+            PowerActiveImportMetric = NormalizeMetric(options.PowerActiveImportMetric, "Power.Active.Import"),
+            FrequencyMetric = NormalizeMetric(options.FrequencyMetric, "Frequency"),
+            PowerOfferedMetric = NormalizeMetric(options.PowerOfferedMetric, "Power.Offered"),
+            CurrentOfferedMetric = NormalizeMetric(options.CurrentOfferedMetric, "Current.Offered"),
+            SoCMetric = NormalizeMetric(options.SoCMetric, "SoC"),
+            EnergyActiveExportRegisterMetric = NormalizeMetric(options.EnergyActiveExportRegisterMetric, "Energy.Active.Export.Register"),
+            PowerActiveExportMetric = NormalizeMetric(options.PowerActiveExportMetric, "Power.Active.Export"),
             SupportSoC = options.SupportSoC,
             SupportHeartbeat = options.SupportHeartbeat,
             ChargerId = options.ChargerId,
