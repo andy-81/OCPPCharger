@@ -59,6 +59,7 @@ public sealed class ChargerClient
     private readonly ConcurrentDictionary<string, PendingStartTransaction> _pendingStartTransactions = new();
     private readonly Dictionary<string, string> _configuration = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _bootPayload;
+    private readonly IReadOnlyDictionary<string, bool> _meterValueMetricToggles;
     private readonly HashSet<string> _localAuthorizationList = new(StringComparer.OrdinalIgnoreCase);
     private int _localListVersion;
     private readonly Random _random = new();
@@ -265,7 +266,7 @@ public sealed class ChargerClient
         return Task.CompletedTask;
     }
 
-    public ChargerClient(Uri url, string identity, string authKey, ChargerIdentity chargerIdentity, string chargePointSerialOverride, string chargeBoxSerialOverride, DualLogger logger, string storageDirectory, int connectorId = 1, bool supportSoC = false, bool enableHeartbeat = true)
+    public ChargerClient(Uri url, string identity, string authKey, ChargerIdentity chargerIdentity, string chargePointSerialOverride, string chargeBoxSerialOverride, DualLogger logger, string storageDirectory, int connectorId = 1, bool supportSoC = false, bool enableHeartbeat = true, IReadOnlyDictionary<string, bool>? meterValueMetricToggles = null)
     {
         _url = url;
         _identity = identity;
@@ -278,6 +279,7 @@ public sealed class ChargerClient
         _supportSoC = supportSoC;
         _heartbeatEnabled = enableHeartbeat;
         _meterStateFilePath = Path.Combine(storageDirectory, "meter_state.txt");
+        _meterValueMetricToggles = meterValueMetricToggles ?? new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         _bootPayload = CreateBootPayload(chargerIdentity, _chargePointSerialOverride, _chargeBoxSerialOverride);
 
         foreach (var kvp in DefaultConfiguration)
@@ -1895,6 +1897,13 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
         return TimeSpan.Zero;
     }
 
+    private bool IsMeasurandEnabled(string measurand)
+    {
+        // Only emit a measurand when it is both present in MeterValuesSampledData/AlignedData
+        // and explicitly enabled via the simulator configuration toggles.
+        return !_meterValueMetricToggles.TryGetValue(measurand, out var enabled) || enabled;
+    }
+
     private IReadOnlyList<string> GetMeterValuesSampledData()
     {
         string? configured;
@@ -1912,6 +1921,7 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
             .Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Trim())
             .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Where(IsMeasurandEnabled)
             .ToArray();
     }
 
@@ -1932,6 +1942,7 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
             .Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Trim())
             .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Where(IsMeasurandEnabled)
             .ToArray();
     }
 

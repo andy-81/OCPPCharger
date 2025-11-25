@@ -215,6 +215,17 @@ app.MapGet("/api/state", (SimulatorState state, SimulatorConfigurationProvider c
             meter_values_sampled_data = meterValues.MeterValuesSampledData,
             meter_value_sample_interval = meterValues.MeterValueSampleInterval,
             clock_aligned_data_interval = meterValues.ClockAlignedDataInterval,
+            meter_value_metrics = new
+            {
+                enableEnergyActiveImportRegister = meterValues.EnableEnergyActiveImportRegister,
+                enablePowerActiveImport = meterValues.EnablePowerActiveImport,
+                enableFrequency = meterValues.EnableFrequency,
+                enablePowerOffered = meterValues.EnablePowerOffered,
+                enableCurrentOffered = meterValues.EnableCurrentOffered,
+                enableSoC = meterValues.EnableSoC,
+                enableEnergyActiveExportRegister = meterValues.EnableEnergyActiveExportRegister,
+                enablePowerActiveExport = meterValues.EnablePowerActiveExport,
+            },
         },
     });
 });
@@ -252,6 +263,14 @@ app.MapPost("/api/bootstrap", async (BootstrapRequest request, SimulatorConfigur
         ChargerId = request.ChargerId,
         ChargePointSerialNumber = cpSerial,
         ChargeBoxSerialNumber = cbSerial,
+        EnableEnergyActiveImportRegister = request.EnableEnergyActiveImportRegister ?? true,
+        EnablePowerActiveImport = request.EnablePowerActiveImport ?? true,
+        EnableFrequency = request.EnableFrequency ?? true,
+        EnablePowerOffered = request.EnablePowerOffered ?? true,
+        EnableCurrentOffered = request.EnableCurrentOffered ?? true,
+        EnableSoC = request.EnableSoC ?? true,
+        EnableEnergyActiveExportRegister = request.EnableEnergyActiveExportRegister ?? true,
+        EnablePowerActiveExport = request.EnablePowerActiveExport ?? true,
         MeterValuesSampledData = string.IsNullOrWhiteSpace(request.MeterValuesSampledData)
             ? SimulatorOptions.DefaultMeterValuesSampledData
             : request.MeterValuesSampledData.Trim(),
@@ -297,6 +316,14 @@ record BootstrapRequest(
     string ChargerId,
     string ChargePointSerialNumber,
     string ChargeBoxSerialNumber,
+    bool? EnableEnergyActiveImportRegister,
+    bool? EnablePowerActiveImport,
+    bool? EnableFrequency,
+    bool? EnablePowerOffered,
+    bool? EnableCurrentOffered,
+    bool? EnableSoC,
+    bool? EnableEnergyActiveExportRegister,
+    bool? EnablePowerActiveExport,
     string? MeterValuesSampledData,
     int? MeterValueSampleInterval,
     int? ClockAlignedDataInterval);

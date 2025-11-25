@@ -129,7 +129,8 @@ public sealed class SimulatorHostedService : BackgroundService
             logger,
             _storageOptions.DataDirectory,
             supportSoC: options.SupportSoC,
-            enableHeartbeat: options.SupportHeartbeat);
+            enableHeartbeat: options.SupportHeartbeat,
+            meterValueMetricToggles: options.GetMeterValueMetricToggles());
 
         client.SetLocalConfiguration("MeterValuesSampledData", options.MeterValuesSampledData);
         client.SetLocalConfiguration("MeterValueSampleInterval", options.MeterValueSampleInterval.ToString(CultureInfo.InvariantCulture));
