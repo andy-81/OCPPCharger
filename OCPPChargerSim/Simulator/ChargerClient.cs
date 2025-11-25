@@ -663,7 +663,7 @@ public sealed class ChargerClient
             return;
         }
 
-        await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
+        await SendMeterValuesAsync(cancellationToken, accumulateEnergy: false, contextOverride: "Sample.Periodic").ConfigureAwait(false);
 
         StartMeterValueLoop(cancellationToken);
         StartClockAlignedMeterValueLoop(cancellationToken);
@@ -983,7 +983,11 @@ public sealed class ChargerClient
         }
     }
 
-    private async Task SendMeterValuesAsync(CancellationToken cancellationToken, bool clockAligned = false)
+    private async Task SendMeterValuesAsync(
+        CancellationToken cancellationToken,
+        bool clockAligned = false,
+        bool accumulateEnergy = true,
+        string? contextOverride = null)
     {
         var transactionId = GetCurrentTransactionId();
         if (!transactionId.HasValue)
@@ -1024,7 +1028,7 @@ public sealed class ChargerClient
         }
         var powerKwValue = Math.Min(currentAmps * NominalVoltage / 1000.0, MaxPowerKw);
 
-        var incrementWh = powerKwValue * elapsedSeconds / 3.6;
+        var incrementWh = accumulateEnergy ? powerKwValue * elapsedSeconds / 3.6 : 0.0;
         _meterAccumulatorWh += incrementWh;
         _meterValue = (int)Math.Round(_meterAccumulatorWh);
         var energyWhValue = Math.Round(_meterAccumulatorWh, 0, MidpointRounding.AwayFromZero);
@@ -1040,7 +1044,7 @@ public sealed class ChargerClient
             return;
         }
 
-        var context = clockAligned ? "Sample.Clock" : "Sample.Periodic";
+        var context = contextOverride ?? (clockAligned ? "Sample.Clock" : "Sample.Periodic");
         var powerWValue = powerKwValue * 1000.0;
         var offeredCurrent = GetConfiguredCurrentLimit() ?? MaxCurrentAmps;
         var offeredPowerWValue = offeredCurrent * NominalVoltage;
@@ -1395,7 +1399,7 @@ public sealed class ChargerClient
 
         StopMeterValueLoop();
 
-        await SendMeterValuesAsync(cancellationToken).ConfigureAwait(false);
+        await SendMeterValuesAsync(cancellationToken, accumulateEnergy: true, contextOverride: "Transaction.End").ConfigureAwait(false);
 
         await SendStopTransactionAsync(reason, cancellationToken).ConfigureAwait(false);
 
@@ -1956,7 +1960,7 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
             "Current.Offered" => CreateSampledValue(offeredCurrent.ToString("0.0", CultureInfo.InvariantCulture), measurand, "A", context),
             "Voltage" => CreateSampledValue(voltageValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "V", context),
             "Frequency" => CreateSampledValue(frequencyHzValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Hz", context),
-            "SoC" when supportSoC => CreateSampledValue(socValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "Percent", context),
+            "SoC" when supportSoC => CreateSampledValue(socValue.ToString("0.0", CultureInfo.InvariantCulture), measurand, "%", context),
             _ => null,
         };
 
@@ -2083,14 +2087,14 @@ private void UpdateLocalVehicleState(string status, StateInitiator initiator)
 
         if (_supportSoC)
         {
-            sampledValues.Add(new Dictionary<string, object>
-            {
-                ["value"] = FixedStateOfCharge.ToString("0.0", CultureInfo.InvariantCulture),
-                ["measurand"] = "SoC",
-                ["unit"] = "Percent",
-                ["context"] = "Sample.Clock",
-            });
-        }
+                sampledValues.Add(new Dictionary<string, object>
+                {
+                    ["value"] = FixedStateOfCharge.ToString("0.0", CultureInfo.InvariantCulture),
+                    ["measurand"] = "SoC",
+                    ["unit"] = "%",
+                    ["context"] = "Sample.Clock",
+                });
+            }
 
         var payload = new Dictionary<string, object>
         {
