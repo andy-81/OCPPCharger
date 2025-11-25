@@ -2,7 +2,7 @@ namespace OcppWeb.Services;
 
 public sealed class SimulatorOptions
 {
-    public const string DefaultMeterValuesSampledData = "Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,Current.Offered,Energy.Active.Export.Register,Power.Active.Export,SoC";
+    public const string DefaultMeterValuesSampledData = "Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,Current.Offered,Energy.Active.Export.Register,Power.Active.Export";
     public const int DefaultMeterValueSampleInterval = 15;
     public const int DefaultClockAlignedDataInterval = 60;
 
